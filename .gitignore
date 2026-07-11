@@ -28,3 +28,29 @@ Homestead.json
 .env.production
 .phpactor.json
 auth.json
+
+# IDE / editors
+/.idea/
+/.vscode/
+/.fleet/
+/.nova/
+/.zed/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# AI tooling runtime/state (local — not project config)
+/.claude-flow/
+/.hive-mind/
+/.swarm/
+/.ruflo/
+/memory/claude-flow-data.json
+
+# NOTE: .claude/ and .mcp.json are intentionally NOT ignored — they can hold
+# shareable project config (commands, agents, MCP servers). Decide per-repo
+# whether to commit them; add here if this project keeps them local.
