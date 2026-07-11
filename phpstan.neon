@@ -1,0 +1,16 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: max
+
+    paths:
+        - app
+        - modules
+
+    excludePaths:
+        # Data/schema scripts (arrays of seed/schema data), not runtime logic.
+        - modules/*/Database/Migrations/*
+        - modules/*/Database/Seeders/*
+        # Declarative config files (like the root config/ dir), not runtime logic.
+        - modules/*/Config/*
