@@ -51,6 +51,8 @@ desktop.ini
 /.ruflo/
 /memory/claude-flow-data.json
 
-# NOTE: .claude/ and .mcp.json are intentionally NOT ignored — they can hold
-# shareable project config (commands, agents, MCP servers). Decide per-repo
-# whether to commit them; add here if this project keeps them local.
+# claude-flow / ruflo local tooling — agents, commands, helpers, skills, and the
+# MCP server definition. Not EVOTECH project source; kept local so the server
+# checkout stays clean on pull.
+/.claude/
+/.mcp.json
