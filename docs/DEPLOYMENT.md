@@ -40,13 +40,37 @@ Confirm these exist in CloudPanel / on the box:
 - [ ] **CloudPanel** reachable (`https://<server-ip>:8443`).
 - [ ] **Node.js 20 LTS or 22** installed (Next 16 requires Node ≥ 20.9).
       Install via CloudPanel's Node.js manager or `nvm`. Check: `node -v`.
-- [ ] **PM2** globally: `npm install -g pm2` (run as the site user, not root, ideally).
+- [ ] **PM2** installed **as the site user** (not root — see box below).
 - [ ] **PHP 8.3** (8.4 matches CI; 8.2 is the floor) available in CloudPanel, with
       extensions: `bcmath, ctype, curl, dom, fileinfo, mbstring, openssl, pdo, pdo_mysql, tokenizer, xml`.
 - [ ] **Composer 2** on PATH: `composer -V`.
 - [ ] **MySQL 8** (CloudPanel bundles MariaDB/MySQL — either is fine per ADR 0003).
-- [ ] **Git** + a deploy key or HTTPS access to
-      `github.com/Mohammad-Hasan-it-96/evotech-core` (and the web repo once it has a remote — see §9).
+- [ ] **Git** + a deploy key or HTTPS access to both repos (see §9).
+
+> **Installing PM2 without root (CloudPanel site users are unprivileged).**
+> `npm install -g pm2` as a CloudPanel site user fails with `EACCES … mkdir
+> '/usr/lib/node_modules/pm2'` — the site user can't write to the system-wide global
+> dir, and that's by design (you don't want the site running as root). Fix by giving
+> npm a global folder **inside the site user's home**, then installing there:
+>
+> ```bash
+> # run as the site user (e.g. evotech-web / evotech-sys)
+> mkdir -p ~/.npm-global
+> npm config set prefix ~/.npm-global
+> echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
+> export PATH="$HOME/.npm-global/bin:$PATH"
+> npm install -g pm2
+> pm2 -v
+> ```
+>
+> PM2 then runs as the site user, which is exactly what we want. (If Node was
+> installed via `nvm` instead of system-wide apt, global installs already land in a
+> writable per-user dir and you won't hit this at all.)
+>
+> **Alternative — skip PM2 entirely:** CloudPanel's native **Node.js site** type
+> supervises the app process for you (start/restart/boot-persistence) without PM2 or
+> sudo. If you'd rather not manage PM2, create the web site as a *Node.js* site
+> (§4.1) instead of a Reverse Proxy site and let CloudPanel run `npm run start`.
 
 ---
 
@@ -259,8 +283,14 @@ vhost) from `/` → `/ar/dashboard`. Not required for launch.
 ### 4.4 Persist PM2 across reboots
 ```bash
 pm2 save
-pm2 startup            # run the command it prints (needs sudo once)
+pm2 startup            # prints a `sudo env PATH=... pm2 startup systemd -u <site-user> ...` line
 ```
+`pm2 startup` registers a systemd boot service, which **needs root once**:
+- **Have a root/sudo login?** Copy the `sudo env PATH=… pm2 startup systemd -u <site-user> …`
+  line it prints and run it as root, then back as the site user: `pm2 save`.
+- **No sudo for the site user?** Skip `pm2 startup` and instead run the web app as a
+  CloudPanel **Node.js site** (§4.1 alternative) so CloudPanel handles boot-restart —
+  or ask whoever administers the box to run the one printed command.
 
 ### 4.5 TLS
 Issue Let's Encrypt certs in CloudPanel for **both** sites: `evotech-sys.com`
