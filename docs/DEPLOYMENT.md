@@ -11,25 +11,29 @@
 
 ---
 
-## 0. Subdomain plan
+## 0. Domain plan — two CloudPanel sites
 
-We agreed to split the platform across subdomains. Final mapping:
+The platform runs as **two** CloudPanel sites (plus the unrelated restaurant site):
 
-| Subdomain | Serves | Repo | Backed by |
-|---|---|---|---|
-| `evotech-sys.com` + `www.evotech-sys.com` | Public marketing website | `evotech-web` | Next.js (Node) via PM2 |
-| `app.evotech-sys.com` | Authenticated dashboard | `evotech-web` (same app, `/[locale]/dashboard`) | Same Next.js process |
-| `api.evotech-sys.com` | REST API (`/api/v1/...`) | `evotech-core` | PHP-FPM (Laravel) |
+| Host | Serves | Repo | CloudPanel site | Backed by |
+|---|---|---|---|---|
+| `api.evotech-sys.com` | REST API (`/api/v1/...`) | `evotech-core` | **PHP** site → `public/` | PHP-FPM (Laravel) |
+| `evotech-sys.com` (+ optional `www`) | Public site **and** dashboard | `evotech-web` | site reverse-proxied to Node | Next.js on `127.0.0.1:3000` (PM2) |
 
 Notes:
-- **One Next.js process serves both `www` and `app`.** The dashboard is a route group
-  inside the same app, so `app.evotech-sys.com` reverse-proxies to the *same* Node port
-  as the marketing site. (You can split them into two PM2 processes later if you want
-  independent scaling — not needed for launch.)
+- **There is no `app.` subdomain, and none is needed.** The dashboard is a route group
+  *inside* the web app at `/{locale}/dashboard`, so it's reachable at
+  **`https://evotech-sys.com/ar/dashboard`** — the same Next.js process serves both the
+  marketing pages and the dashboard. (You can promote it to an `app.` subdomain later by
+  adding a site that proxies to the same port — optional, not for launch.)
 - The API is a normal CloudPanel **PHP site** pointed at Laravel's `public/` dir.
+- The web host runs **Node**, not PHP. In CloudPanel that means either a **Node.js site**
+  (CloudPanel writes the reverse-proxy vhost for you) or a site whose vhost you edit to
+  `proxy_pass` to `127.0.0.1:3000` — see §4. Do **not** try to serve Next.js from a
+  PHP-FPM site root.
 - Auth is **token-based (Sanctum bearer tokens)**, not cookie/session — so the browser
-  never needs a shared parent cookie domain. Cross-subdomain works with plain CORS +
-  `Authorization` header. This keeps the subdomain split simple.
+  never needs a shared parent cookie domain; a plain CORS allow-list + `Authorization`
+  header is enough.
 
 ---
 
@@ -76,19 +80,18 @@ Confirm these exist in CloudPanel / on the box:
 
 ## 2. Cloudflare DNS
 
-In the Cloudflare dashboard for `evotech-sys.com` → **DNS → Records**, create four `A`
-records all pointing at your **VPS public IP**:
+In the Cloudflare dashboard for `evotech-sys.com` → **DNS → Records**, create these `A`
+records pointing at your **VPS public IP** (`www` is optional):
 
 | Type | Name | Content | Proxy |
 |---|---|---|---|
 | A | `@`   | `<VPS_IP>` | see note |
-| A | `www` | `<VPS_IP>` | see note |
-| A | `app` | `<VPS_IP>` | see note |
 | A | `api` | `<VPS_IP>` | see note |
+| A | `www` | `<VPS_IP>` | see note (optional) |
 
 **Proxy (orange vs grey cloud) — recommended launch path:**
 
-1. Set all four to **DNS only (grey cloud)** first.
+1. Set them to **DNS only (grey cloud)** first.
 2. Issue SSL certs inside CloudPanel (§4) — Let's Encrypt needs the grey cloud so the
    HTTP-01 challenge reaches your server directly.
 3. Once each site loads over HTTPS, **optionally** switch the records to **Proxied
@@ -177,13 +180,13 @@ PAYMENTS_GATEWAY=manual
 # STRIPE_KEY=pk_live_...
 # STRIPE_WEBHOOK_SECRET=whsec_...
 
-# Which browser origins may call the API (dashboard + site)
-FRONTEND_URL=https://app.evotech-sys.com
+# Which browser origin may call the API (the web site + dashboard)
+FRONTEND_URL=https://evotech-sys.com
 ```
 
 ### 3.5 CORS (cross-subdomain browser calls)
-The dashboard (`app.evotech-sys.com`) and site (`www`) call the API on another
-subdomain, so the API must allow those origins. Publish and edit the CORS config:
+The web site + dashboard (`evotech-sys.com`) call the API on the `api.` subdomain, so
+the API must allow that origin. Publish and edit the CORS config:
 
 ```bash
 php artisan config:publish cors
@@ -193,8 +196,7 @@ In `config/cors.php` set:
 'paths' => ['api/*', 'sanctum/csrf-cookie'],
 'allowed_origins' => [
     'https://evotech-sys.com',
-    'https://www.evotech-sys.com',
-    'https://app.evotech-sys.com',
+    'https://www.evotech-sys.com',   // only if you added the www record
 ],
 'allowed_methods' => ['*'],
 'allowed_headers' => ['*'],
@@ -237,21 +239,31 @@ CloudPanel → Site `api.evotech-sys.com` → **SSL/TLS → Let's Encrypt → Is
 
 ---
 
-## 4. Deploy the website + dashboard — `evotech-sys.com`, `www`, `app` (evotech-web)
+## 4. Deploy the website + dashboard — `evotech-sys.com` (evotech-web)
 
-The same Next.js process serves all three; we run it on an internal port with PM2 and
-put CloudPanel **Reverse Proxy** sites in front.
+One Next.js process serves both the marketing pages **and** the dashboard
+(`/{locale}/dashboard`). It listens on `127.0.0.1:3000`; the CloudPanel site's Nginx
+reverse-proxies to it. There is **no `app.` subdomain**.
 
-### 4.1 Create the primary site
-CloudPanel → **Sites → Add Site → Reverse Proxy** (or Node.js site type if you prefer
-CloudPanel to manage the process):
-- Domain: `evotech-sys.com`, add `www.evotech-sys.com` as an additional domain/alias.
-- Reverse proxy target: `http://127.0.0.1:3000`.
-- Note the site user, e.g. `/home/evotech-web/`.
+### 4.1 The site + how Nginx reaches Node
+Next.js is a Node app, so the `evotech-sys.com` site's vhost must reverse-proxy to the
+Node process — a PHP-FPM site root won't serve it. Two ways:
 
-### 4.2 Get the code + build
+- **(a) Edit an existing site's vhost — least disruptive.** If `evotech-sys.com` already
+  exists (even as a PHP site), keep it and just change its Nginx to proxy to Node. This
+  avoids recreating the site user / reinstalling PM2. Do the vhost edit in §4.3.
+- **(b) Recreate as a Node.js site — CloudPanel-native.** Delete the site and
+  **Add Site → Create a Node.js Site**, Domain `evotech-sys.com`, Node version 20/22,
+  **App Port `3000`**. CloudPanel writes the proxy vhost for you (you still run the app
+  with PM2 in §4.2). Recreating makes a fresh site user, so you'd redo the PM2 setup
+  from §1.
+
+Either way, note the site user + home, e.g. `/home/evotech-sys/`.
+
+### 4.2 Get the code, build, run
+Run as the **site user** (e.g. `evotech-sys`):
 ```bash
-cd /home/evotech-web/htdocs
+cd /home/evotech-sys/htdocs
 rm -rf evotech-sys.com
 git clone https://github.com/Mohammad-Hasan-it-96/evotech-web.git evotech-sys.com
 cd evotech-sys.com
@@ -262,23 +274,32 @@ Create `.env.production` (git-ignored):
 NEXT_PUBLIC_API_URL=https://api.evotech-sys.com/api
 NODE_ENV=production
 ```
-Build + start under PM2 on port 3000:
+Build + start under PM2 (Next defaults to port 3000):
 ```bash
 npm run build
-pm2 start "npm run start" --name evotech-web -- --port 3000
-# (or: PORT=3000 pm2 start npm --name evotech-web -- run start)
+pm2 start "npm run start" --name evotech-web
+pm2 save
+pm2 list          # evotech-web should be "online"
 ```
 
-### 4.3 The `app.` subdomain (dashboard)
-Create a **second** Reverse Proxy site in CloudPanel:
-- Domain: `app.evotech-sys.com`
-- Target: **the same** `http://127.0.0.1:3000`.
-
-The dashboard lives at `/[locale]/dashboard` inside the app, so
-`https://app.evotech-sys.com` will resolve into the Next app. If you want the bare
-`app.` host to land users directly on the dashboard, add a redirect/rewrite (in
-`next.config.ts` `redirects()` keyed on host, or a small Nginx rule in the CloudPanel
-vhost) from `/` → `/ar/dashboard`. Not required for launch.
+### 4.3 Point the site's Nginx at Node (vhost reverse proxy)
+Only needed for path (a) — a Node.js site (path b) already has this. In CloudPanel →
+**Manage `evotech-sys.com` → Vhost**, replace the main `location / { ... }` block with:
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_cache_bypass $http_upgrade;
+}
+```
+Save — CloudPanel reloads Nginx. The dashboard is now at
+`https://evotech-sys.com/{locale}/dashboard` (e.g. `/ar/dashboard`).
 
 ### 4.4 Persist PM2 across reboots
 ```bash
@@ -293,12 +314,12 @@ pm2 startup            # prints a `sudo env PATH=... pm2 startup systemd -u <sit
   or ask whoever administers the box to run the one printed command.
 
 ### 4.5 TLS
-Issue Let's Encrypt certs in CloudPanel for **both** sites: `evotech-sys.com`
-(+`www`) and `app.evotech-sys.com` (grey-cloud DNS at issue time).
+Issue a Let's Encrypt cert in CloudPanel for `evotech-sys.com` (+ `www` if you added
+that record) — grey-cloud DNS at issue time (§2).
 
 **Smoke test:**
 - `https://evotech-sys.com` → redirects to `/ar` (Arabic default, RTL) and renders.
-- `https://app.evotech-sys.com/ar/dashboard` → dashboard login.
+- `https://evotech-sys.com/ar/dashboard` → dashboard login.
 - Dashboard login talks to `https://api.evotech-sys.com` with no CORS error (check
   browser devtools console).
 
@@ -323,8 +344,7 @@ credential-reviewed.
 
 - [ ] `https://api.evotech-sys.com/up` → 200
 - [ ] `https://evotech-sys.com` and `/en` both render; language switch works
-- [ ] `https://www.evotech-sys.com` serves (not a cert warning)
-- [ ] `https://app.evotech-sys.com` reaches the dashboard
+- [ ] `https://evotech-sys.com/ar/dashboard` reaches the dashboard login
 - [ ] Dashboard login succeeds; an authenticated API call returns data (no CORS error)
 - [ ] `pm2 list` shows `evotech-web` + `evotech-queue` **online**
 - [ ] Scheduler cron present (`crontab -l`)
@@ -347,7 +367,7 @@ pm2 restart evotech-queue        # workers must reload to run new code
 
 **Web (evotech-web):**
 ```bash
-cd /home/evotech-web/htdocs/evotech-sys.com
+cd /home/evotech-sys/htdocs/evotech-sys.com
 git pull
 npm ci
 npm run build
@@ -387,6 +407,6 @@ server — set them per §3.4 (API) and §4.2 (web) after cloning.
 | Service | Process | Internal port | Public host | CloudPanel site type |
 |---|---|---|---|---|
 | Laravel API | PHP-FPM | (unix socket) | `api.evotech-sys.com` | PHP |
-| Next.js (site+dashboard) | PM2 `evotech-web` | `127.0.0.1:3000` | `evotech-sys.com`, `www`, `app` | Reverse Proxy ×2 |
+| Next.js (site + dashboard at `/{locale}/dashboard`) | PM2 `evotech-web` | `127.0.0.1:3000` | `evotech-sys.com` (+ `www`) | Node.js site, or PHP site w/ proxy vhost |
 | Queue worker | PM2 `evotech-queue` | — | — | — |
 | Scheduler | cron `schedule:run` | — | — | — |
