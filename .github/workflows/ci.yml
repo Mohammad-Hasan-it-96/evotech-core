@@ -69,9 +69,16 @@ jobs:
           DB_PASSWORD: root
         run: php artisan test
 
+      # Scramble introspects model schemas to type responses, so the export needs a
+      # migrated database. The generated spec is engine-independent (SQLite and MySQL
+      # produce a byte-identical document), so use the SQLite default from .env.example
+      # to keep this step hermetic. `composer openapi` is the same command documented
+      # for regenerating the spec locally, so CI and contributors stay in step.
       - name: OpenAPI spec is committed & up to date
         run: |
-          php artisan scramble:export --path=docs/api/openapi.json
+          touch database/database.sqlite
+          php artisan migrate --force
+          composer openapi
           git diff --exit-code docs/api/openapi.json
 
       - name: Dependency security audit

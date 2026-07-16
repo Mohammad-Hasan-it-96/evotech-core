@@ -31,6 +31,7 @@ class User extends Authenticatable implements HasCompany
 
     /** @use HasFactory<UserFactory> */
     use HasFactory;
+
     use HasUuid;
     use Notifiable;
 

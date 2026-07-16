@@ -34,6 +34,7 @@ class Customer extends Model
 
     /** @use HasFactory<CustomerFactory> */
     use HasFactory;
+
     use HasUuid;
     use SoftDeletes;
 
