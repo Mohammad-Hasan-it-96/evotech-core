@@ -86,7 +86,22 @@ Download Center, IoT / smart controllers, future SaaS products — per the const
   - **Private storage + signed delivery**: artifacts live on a private disk (`s3`-ready by env), delivered only via **short-lived signed URLs** — never a public path; expired/tampered links `403`. Every link minted is recorded to an immutable `download_events` ledger. ✅
   - **Product self-update** (`auth:product`, ADR 0004): `GET /api/v1/product/releases/latest` (auto-update check) + a scoped signed-link endpoint; a product only ever sees its own product's artifacts (cross-product `404`). ✅
   - Docs: [`docs/modules/downloads.md`](modules/downloads.md). Quality: **121 backend tests**, Larastan max, Pint, OpenAPI regenerated.
+- **API — `DeviceSubscriptions`** module ([ADR 0010](adr/0010-device-subscriptions-module.md)): device-keyed subscriptions for **shipped consumer apps** (subscriber = a **device**, not a Company) — the successor to the legacy SmartAgent backend. Scaffolded: legacy `/api/*` compatibility shim + versioned twins, non-tenant, push port, legacy import command. Docs: [`docs/modules/DeviceSubscriptions.md`](modules/DeviceSubscriptions.md). 🚧 *Cutover pending.*
 - **Remaining in Phase 6:** IoT / smart controllers (largely covered by Phase 4's signed offline tokens + device activation — additive telemetry/firmware channels), future SaaS products.
+
+### 🚧 Phase 7 — App APIs & Fawateer go-live (in progress)
+Putting the shipped consumer apps (**SmartAgent**, **Fawateer**) on the platform, and
+naming the **two API profiles** every EVOTECH client speaks — **Profile A** (legacy
+device API: unversioned, unauthenticated, local-first apps) and **Profile B** (the
+versioned, authenticated `/api/v1` platform API).
+
+**→ See [`ROADMAP-APP-APIS.md`](./ROADMAP-APP-APIS.md) for the full plan, gap analysis and cutover.**
+
+Headline: **Fawateer needs no invoicing domain API** — the app is local-first (Drift/SQLite
+owns every business table) and deliberately reuses the SmartAgent contract, distinguished
+only by `app_name`. Go-live is closing a small set of compatibility gaps in
+`DeviceSubscriptions` (partial `update_my_data`, plan requests, `is_trial`, a server-granted
+30-day trial), plus an operator console to fulfil sales.
 
 ---
 
