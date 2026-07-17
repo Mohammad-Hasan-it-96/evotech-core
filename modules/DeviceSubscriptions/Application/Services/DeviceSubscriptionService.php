@@ -26,8 +26,13 @@ final class DeviceSubscriptionService
     }
 
     /**
-     * Register a new device, or refresh an existing one's push token. Idempotent
-     * on the (device_id, app_name) pair — mirrors legacy create_device.
+     * Register a new device, or refresh an existing one. Idempotent on the
+     * (device_id, app_name) pair — mirrors legacy create_device.
+     *
+     * The shipped Fawateer app reuses this endpoint to file a purchase intent
+     * (requested_plan + contact_method + status:'pending'), and it does so for a
+     * device that is normally already registered — so the request fields must be
+     * recorded on the existing row, not just at creation.
      */
     public function registerOrTouch(
         string $appName,
@@ -35,12 +40,27 @@ final class DeviceSubscriptionService
         string $fullName,
         string $phone,
         ?string $fcmToken,
+        ?string $requestedPlan = null,
+        ?string $contactMethod = null,
+        ?string $status = null,
     ): DeviceSubscription {
         $device = $this->find($deviceId, $appName);
 
+        $planRequest = self::present([
+            'requested_plan' => $requestedPlan,
+            'contact_method' => $contactMethod,
+            'status' => $status,
+        ]);
+
         if ($device !== null) {
+            $changes = $planRequest;
+
             if ($fcmToken !== null) {
-                $device->update(['fcm_token' => $fcmToken]);
+                $changes['fcm_token'] = $fcmToken;
+            }
+
+            if ($changes !== []) {
+                $device->update($changes);
             }
 
             return $device;
@@ -53,20 +73,44 @@ final class DeviceSubscriptionService
             'phone' => $phone,
             'is_verified' => false,
             'fcm_token' => $fcmToken,
+            ...$planRequest,
         ]);
     }
 
+    /**
+     * Partial profile update — only the fields actually sent are written.
+     *
+     * The app rotates its push token by sending fcm_token alone, and edits the
+     * profile by sending full_name/phone alone. Writing the absent fields would
+     * blank them (a name edit used to wipe the push token, silently costing the
+     * device its live-unlock notification).
+     */
     public function updateProfile(
         DeviceSubscription $device,
-        string $fullName,
-        string $phone,
+        ?string $fullName,
+        ?string $phone,
         ?string $fcmToken,
     ): void {
-        $device->update([
+        $changes = self::present([
             'full_name' => $fullName,
             'phone' => $phone,
             'fcm_token' => $fcmToken,
         ]);
+
+        if ($changes !== []) {
+            $device->update($changes);
+        }
+    }
+
+    /**
+     * Drop the keys whose value was not supplied.
+     *
+     * @param  array<string, string|null>  $values
+     * @return array<string, string>
+     */
+    private static function present(array $values): array
+    {
+        return array_filter($values, static fn (?string $value): bool => $value !== null);
     }
 
     public function addReview(DeviceSubscription $device, int $stars, ?string $comment): void

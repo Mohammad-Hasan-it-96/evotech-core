@@ -138,20 +138,28 @@ Verified against both codebases. **Severity** is the effect on a real user.
 
 ## 4. Phases
 
-### Phase A — Fawateer compatibility (go-live blocker) 🚧
+### Phase A — Fawateer compatibility ✅ (done)
 
-Close gaps 1, 2, 3, 5, 7, 9 in `Modules\DeviceSubscriptions`.
+Closed gaps 1, 2, 3, 5, 7, 9 in `Modules\DeviceSubscriptions`.
 
-- Relax `update_my_data` to accept a **partial** update (any of `full_name`,
-  `phone`, `fcm_token`); update only what's sent. *(gap 1)*
-- Accept and persist `requested_plan`, `contact_method`, `status` on
-  `create_device`; surface them to staff. *(gap 2)*
-- Add `is_trial` to both `create_device` and `check_device`; add `server_time` to
+- `update_my_data` now takes a **partial** update — any of `full_name`, `phone`,
+  `fcm_token`; only what's sent is written. *(gap 1)*
+- `create_device` accepts and persists `requested_plan`, `contact_method`,
+  `status`, **including on an already-registered device** — which is how the app
+  actually files a purchase intent. *(gap 2)*
+- `is_trial` on both `create_device` and `check_device`; `server_time` on
   `create_device`. *(gaps 3, 5)*
-- Migration: `status`, `trial_expires_at`, `requested_plan`, `contact_method`.
-- Tests asserting the **exact** shipped-app payloads, including the FCM-only body.
+- `price_after_discount` in the plan catalog; `success` retained for SmartAgent. *(gaps 7, 9)*
+- Migration `2026_07_17_100000`: `status`, `trial_expires_at`, `requested_plan`,
+  `contact_method` — all nullable, so the legacy import is unaffected.
+- **Also fixed:** a profile edit used to blank `fcm_token` (it was written
+  unconditionally), silently costing the device its live-unlock push.
 
-**Exit:** every request the shipped app can make is served with the shape it parses.
+Tests assert the exact shipped-app payloads, including the FCM-only rotation body.
+**19 module tests green (152 suite-wide); Pint + Larastan max clean.**
+
+**Exit met:** every request the shipped app can make is served with the shape it
+parses. `is_trial` is wired end-to-end but stays `0` until Phase B grants trials.
 
 ### Phase B — Server-granted trial 🚧
 

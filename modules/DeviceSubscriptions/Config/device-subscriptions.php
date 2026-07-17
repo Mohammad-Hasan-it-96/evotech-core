@@ -49,12 +49,20 @@ return [
         'symbol' => '$',
     ],
 
+    /*
+     * `price_after_discount` is read by the shipped Fawateer plan parser; null means
+     * "no discount". Both apps read one catalog today — getPlans carries no app_name,
+     * so it cannot vary per app. Per-app pricing is Phase D of
+     * docs/ROADMAP-APP-APIS.md (namespace the shim by base URL, which the apps'
+     * separate remote-config files already allow).
+     */
     'plans' => [
         [
             'id' => 'half_year',
             'title' => 'الخطة نصف السنوية',
             'duration_months' => 6,
             'price' => 12,
+            'price_after_discount' => null,
             'enabled' => true,
             'recommended' => false,
             'description' => 'أفضل خيار للتجربة طويلة المدى',
@@ -64,6 +72,7 @@ return [
             'title' => 'الخطة السنوية',
             'duration_months' => 12,
             'price' => 20,
+            'price_after_discount' => null,
             'enabled' => true,
             'recommended' => true,
             'description' => 'الأكثر توفيراً',

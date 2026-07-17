@@ -32,9 +32,9 @@ with no auth token**, so the module exposes three route groups:
 
 | Method | Path | Controller | Notes |
 |---|---|---|---|
-| POST | `/api/create_device` | `DeviceController@createDevice` | Register a device or refresh its `fcm_token`; returns current status. Idempotent on the pair. |
-| POST | `/api/check_device` | `DeviceController@checkDevice` | Status; `is_verified` forced `0` past `expires_at`. `404` if unknown. |
-| POST | `/api/update_my_data` | `DeviceController@updateMyData` | Update name/phone/token. |
+| POST | `/api/create_device` | `DeviceController@createDevice` | Register a device, refresh its `fcm_token`, **or file a plan request** (`requested_plan` + `contact_method` + `status`). Idempotent on the pair. Returns `is_verified`, `is_trial`, `expires_at`, `plan`, `fcm_token`, `server_time`. |
+| POST | `/api/check_device` | `DeviceController@checkDevice` | Status; `is_verified` forced `0` past `expires_at`. Returns `is_trial` + `server_time`. `404` if unknown. |
+| POST | `/api/update_my_data` | `DeviceController@updateMyData` | **Partial** update — any of name/phone/token. Only what's sent is written. |
 | POST | `/api/add_review` | `DeviceController@addReview` | Store `stars` (1–5) + `comment`. |
 | GET | `/api/getPlans` | `PlanController@index` | Static plan catalog from config. |
 | GET | `/api/app-download` | `AppDownloadController@index` | Version + APK links (JSON; the HTML page lives in evotech-web). |
@@ -67,7 +67,7 @@ $20, recommended), preserving the exact `getPlans` payload. Prices change via co
 
 | Class | Notes |
 |---|---|
-| `Domain\Models\DeviceSubscription` | `HasUuid` route key; **no** tenancy. `isActive()` = verified **and** unexpired. `scopeForDevice()`. |
+| `Domain\Models\DeviceSubscription` | `HasUuid` route key; **no** tenancy. `isActive()` = verified **and** unexpired. `isOnTrial()` = has a `trial_expires_at`, no `plan_id` yet, still active — so activation ends the trial by setting `plan_id`, with no flag to rewrite. `scopeForDevice()`. |
 | `Domain\Enums\DevicePlan` | `half_year` / `yearly` + `durationMonths()`. |
 | `Application\Services\DeviceSubscriptionService` | register/check/update/review/activate/list + `sweepExpiryReminders()`. Emits `DeviceActivated`. |
 | `Application\Services\DevicePlanCatalog` | read model over the config plans. |

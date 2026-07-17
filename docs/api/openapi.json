@@ -1109,7 +1109,7 @@
         "/create_device": {
             "post": {
                 "operationId": "modules.deviceSubscriptions.device.createDevice_0",
-                "summary": "POST create_device \u2014 register a device or refresh its token; returns status",
+                "summary": "POST create_device \u2014 register a device, refresh its token, or file a plan\nrequest. The app reuses this one endpoint for all three",
                 "tags": [
                     "Device"
                 ],
@@ -1137,6 +1137,28 @@
                                             "string",
                                             "null"
                                         ]
+                                    },
+                                    "requested_plan": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "description": "Purchase intent (Fawateer): kept permissive on purpose \u2014 a 422 here\nwould fail registration outright in the shipped app.",
+                                        "maxLength": 50
+                                    },
+                                    "contact_method": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 30
+                                    },
+                                    "status": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 20
                                     }
                                 },
                                 "required": [
@@ -1160,6 +1182,9 @@
                                         "is_verified": {
                                             "type": "integer"
                                         },
+                                        "is_trial": {
+                                            "type": "integer"
+                                        },
                                         "expires_at": {
                                             "type": [
                                                 "string",
@@ -1178,13 +1203,21 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "server_time": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         }
                                     },
                                     "required": [
                                         "is_verified",
+                                        "is_trial",
                                         "expires_at",
                                         "plan",
-                                        "fcm_token"
+                                        "fcm_token",
+                                        "server_time"
                                     ]
                                 }
                             }
@@ -1268,6 +1301,9 @@
                                         "is_verified": {
                                             "type": "integer"
                                         },
+                                        "is_trial": {
+                                            "type": "integer"
+                                        },
                                         "plan": {
                                             "type": [
                                                 "string",
@@ -1291,6 +1327,7 @@
                                     "required": [
                                         "success",
                                         "is_verified",
+                                        "is_trial",
                                         "plan",
                                         "expires_at",
                                         "server_time"
@@ -1358,7 +1395,8 @@
         "/update_my_data": {
             "post": {
                 "operationId": "modules.deviceSubscriptions.device.updateMyData_0",
-                "summary": "POST update_my_data \u2014 update the device's profile",
+                "description": "Every field beyond the device key is optional: the app rotates its push\ntoken by sending fcm_token alone, and edits the profile by sending\nfull_name/phone alone. Requiring all of them 422'd token rotation, which\nsilently cost the device its live-unlock push.",
+                "summary": "POST update_my_data \u2014 partial profile update",
                 "tags": [
                     "Device"
                 ],
@@ -1386,17 +1424,12 @@
                                         "maxLength": 255
                                     },
                                     "fcm_token": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ]
+                                        "type": "string"
                                     }
                                 },
                                 "required": [
                                     "device_id",
-                                    "app_name",
-                                    "full_name",
-                                    "phone"
+                                    "app_name"
                                 ]
                             }
                         }
@@ -1599,7 +1632,7 @@
         "/v1/device/register": {
             "post": {
                 "operationId": "v1.device.register",
-                "summary": "POST create_device \u2014 register a device or refresh its token; returns status",
+                "summary": "POST create_device \u2014 register a device, refresh its token, or file a plan\nrequest. The app reuses this one endpoint for all three",
                 "tags": [
                     "Device"
                 ],
@@ -1627,6 +1660,28 @@
                                             "string",
                                             "null"
                                         ]
+                                    },
+                                    "requested_plan": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "description": "Purchase intent (Fawateer): kept permissive on purpose \u2014 a 422 here\nwould fail registration outright in the shipped app.",
+                                        "maxLength": 50
+                                    },
+                                    "contact_method": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 30
+                                    },
+                                    "status": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 20
                                     }
                                 },
                                 "required": [
@@ -1650,6 +1705,9 @@
                                         "is_verified": {
                                             "type": "integer"
                                         },
+                                        "is_trial": {
+                                            "type": "integer"
+                                        },
                                         "expires_at": {
                                             "type": [
                                                 "string",
@@ -1668,13 +1726,21 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "server_time": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         }
                                     },
                                     "required": [
                                         "is_verified",
+                                        "is_trial",
                                         "expires_at",
                                         "plan",
-                                        "fcm_token"
+                                        "fcm_token",
+                                        "server_time"
                                     ]
                                 }
                             }
@@ -1761,6 +1827,9 @@
                                         "is_verified": {
                                             "type": "integer"
                                         },
+                                        "is_trial": {
+                                            "type": "integer"
+                                        },
                                         "plan": {
                                             "type": [
                                                 "string",
@@ -1784,6 +1853,7 @@
                                     "required": [
                                         "success",
                                         "is_verified",
+                                        "is_trial",
                                         "plan",
                                         "expires_at",
                                         "server_time"
@@ -1854,7 +1924,8 @@
         "/v1/device/profile": {
             "post": {
                 "operationId": "v1.device.profile",
-                "summary": "POST update_my_data \u2014 update the device's profile",
+                "description": "Every field beyond the device key is optional: the app rotates its push\ntoken by sending fcm_token alone, and edits the profile by sending\nfull_name/phone alone. Requiring all of them 422'd token rotation, which\nsilently cost the device its live-unlock push.",
+                "summary": "POST update_my_data \u2014 partial profile update",
                 "tags": [
                     "Device"
                 ],
@@ -1882,17 +1953,12 @@
                                         "maxLength": 255
                                     },
                                     "fcm_token": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ]
+                                        "type": "string"
                                     }
                                 },
                                 "required": [
                                     "device_id",
-                                    "app_name",
-                                    "full_name",
-                                    "phone"
+                                    "app_name"
                                 ]
                             }
                         }
@@ -6158,6 +6224,31 @@
                             "null"
                         ],
                         "format": "date-time"
+                    },
+                    "status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "requested_plan": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "contact_method": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "trial_expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
                     }
                 },
                 "required": [
@@ -6174,7 +6265,11 @@
                     "stars",
                     "comment",
                     "created_at",
-                    "updated_at"
+                    "updated_at",
+                    "status",
+                    "requested_plan",
+                    "contact_method",
+                    "trial_expires_at"
                 ],
                 "title": "DeviceSubscription"
             },
