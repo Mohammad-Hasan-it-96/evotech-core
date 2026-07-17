@@ -32,9 +32,9 @@ with no auth token**, so the module exposes three route groups:
 
 | Method | Path | Controller | Notes |
 |---|---|---|---|
-| POST | `/api/create_device` | `DeviceController@createDevice` | Register a device or refresh its `fcm_token`; returns current status. Idempotent on the pair. |
-| POST | `/api/check_device` | `DeviceController@checkDevice` | Status; `is_verified` forced `0` past `expires_at`. `404` if unknown. |
-| POST | `/api/update_my_data` | `DeviceController@updateMyData` | Update name/phone/token. |
+| POST | `/api/create_device` | `DeviceController@createDevice` | Register a device, refresh its `fcm_token`, **or file a plan request** (`requested_plan` + `contact_method` + `status`). Idempotent on the pair. Returns `is_verified`, `is_trial`, `expires_at`, `plan`, `fcm_token`, `server_time`. |
+| POST | `/api/check_device` | `DeviceController@checkDevice` | Status; `is_verified` forced `0` past `expires_at`. Returns `is_trial` + `server_time`. `404` if unknown. |
+| POST | `/api/update_my_data` | `DeviceController@updateMyData` | **Partial** update — any of name/phone/token. Only what's sent is written. |
 | POST | `/api/add_review` | `DeviceController@addReview` | Store `stars` (1–5) + `comment`. |
 | GET | `/api/getPlans` | `PlanController@index` | Static plan catalog from config. |
 | GET | `/api/app-download` | `AppDownloadController@index` | Version + APK links (JSON; the HTML page lives in evotech-web). |
@@ -54,20 +54,62 @@ with no auth token**, so the module exposes three route groups:
 ### Versioned twins
 
 `/api/v1/device/{register,check,profile,review,plans}` (`auth:product`, `throttle:product`) mirror
-the device endpoints for future app versions. `/api/v1/device-subscriptions` (index) and
-`/api/v1/device-subscriptions/{deviceSubscription}/activate` (`auth:sanctum`) are the enveloped
-staff API, keyed by the model's `uuid`.
+the device endpoints for future app versions.
+
+The enveloped staff API (`auth:sanctum`), keyed by the model's `uuid`, backs the operator console
+at `evotech-web` `/dashboard/devices`:
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/device-subscriptions` | Paginated. Filters: `status` (`pending` = the work queue), `app_name`, `q` (searches `device_id`, `full_name`, `phone`). |
+| GET | `/api/v1/device-subscriptions/plans` | The catalog to activate against — the same one the apps see, so an operator cannot pick a plan id the device would not recognise. |
+| POST | `/api/v1/device-subscriptions/{deviceSubscription}/activate` | Activate/extend. **Closes the pending request** (`status → null`); `requested_plan` is kept, since the operator may sell a different plan. |
 
 ## Plans
 
 Static in `config/device-subscriptions.php` (`half_year` — 6 months, $12; `yearly` — 12 months,
 $20, recommended), preserving the exact `getPlans` payload. Prices change via config, no deploy.
 
+**Per-app catalogs.** `getPlans` is the one device endpoint carrying no `app_name`, so on the
+shared `/api/*` surface it cannot tell the apps apart. The whole shim is therefore also served
+under **`/api/{slug}/*`** (`apps.<App>.slug`) from one route definition; pointing an app's
+remote-config `baseUrl` at `…/api/fawateer` namespaces every call it makes, with **no store
+release**. Set `apps.<App>.plans` to give that app its own catalog — omit it and it reads the
+shared list (what both apps do today). An unknown slug serves the shared catalog rather than
+erroring, so a typo'd base URL degrades to current behaviour. `{app}` excludes version segments
+(`v1`, `v2`…), so the namespace can never shadow the platform API.
+
+Activation resolves a plan's term in **the device's own** app catalog — the same id may mean a
+different number of months per app.
+
+## Per-app settings & the free trial
+
+One deployment serves several shipped apps, told apart only by the `app_name` they send.
+They do **not** share policy — `config('device-subscriptions.apps')` keys settings per app
+(case-insensitive):
+
+| App | `trial_days` | `label` |
+|---|---|---|
+| `Fawateer` | 30 | فواتير |
+| `SmartAgent` | 0 (none) | المندوب الذكي |
+
+An app absent from the map gets **no trial** and falls back to its raw `app_name` as the label.
+The trial is Fawateer's design; granting it platform-wide would silently change SmartAgent's
+monetization.
+
+**The trial is a server-stamped expiry, not a second system.** First registration sets
+`is_verified`, `expires_at` **and** `trial_expires_at` to `now + trial_days`; the app gates on
+`expires_at` exactly as it would a paid one. It is **granted only on row creation**, which is
+what makes it unfarmable — Android's `ANDROID_ID` survives uninstall/data-clear, so a reinstall
+finds the existing row and gets nothing (imported legacy rows are never retro-granted). Operator
+activation converts it by setting `plan_id`, which ends the trial by definition;
+`trial_expires_at` is kept as the record that a trial was spent.
+
 ## Domain, jobs & extension points
 
 | Class | Notes |
 |---|---|
-| `Domain\Models\DeviceSubscription` | `HasUuid` route key; **no** tenancy. `isActive()` = verified **and** unexpired. `scopeForDevice()`. |
+| `Domain\Models\DeviceSubscription` | `HasUuid` route key; **no** tenancy. `isActive()` = verified **and** unexpired. `isOnTrial()` = has a `trial_expires_at`, no `plan_id` yet, still active — so activation ends the trial by setting `plan_id`, with no flag to rewrite. `scopeForDevice()`. |
 | `Domain\Enums\DevicePlan` | `half_year` / `yearly` + `durationMonths()`. |
 | `Application\Services\DeviceSubscriptionService` | register/check/update/review/activate/list + `sweepExpiryReminders()`. Emits `DeviceActivated`. |
 | `Application\Services\DevicePlanCatalog` | read model over the config plans. |

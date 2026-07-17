@@ -23,7 +23,10 @@ final class DeviceController
 {
     public function __construct(private readonly DeviceSubscriptionService $devices) {}
 
-    /** POST create_device — register a device or refresh its token; returns status. */
+    /**
+     * POST create_device — register a device, refresh its token, or file a plan
+     * request. The app reuses this one endpoint for all three.
+     */
     public function createDevice(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
@@ -32,6 +35,11 @@ final class DeviceController
             'full_name' => 'required|string',
             'phone' => 'required|string',
             'fcm_token' => 'nullable|string',
+            // Purchase intent (Fawateer): kept permissive on purpose — a 422 here
+            // would fail registration outright in the shipped app.
+            'requested_plan' => 'nullable|string|max:50',
+            'contact_method' => 'nullable|string|max:30',
+            'status' => 'nullable|string|max:20',
         ]);
 
         if ($validator->fails()) {
@@ -43,14 +51,25 @@ final class DeviceController
             deviceId: (string) $request->string('device_id'),
             fullName: (string) $request->string('full_name'),
             phone: (string) $request->string('phone'),
-            fcmToken: $request->filled('fcm_token') ? (string) $request->string('fcm_token') : null,
+            fcmToken: $this->optional($request, 'fcm_token'),
+            requestedPlan: $this->optional($request, 'requested_plan'),
+            contactMethod: $this->optional($request, 'contact_method'),
+            status: $this->optional($request, 'status'),
         );
 
         return response()->json([
-            'is_verified' => (int) $device->is_verified,
+            // isActive(), not the raw column: legacy only forced is_verified to 0
+            // past expiry on check_device, so create_device could answer
+            // "verified" alongside an expires_at in the past. Harmless while every
+            // device was operator-activated; with trials it means a device whose
+            // trial has lapsed re-registers and is told it is verified. Both
+            // endpoints now answer with one definition.
+            'is_verified' => (int) $device->isActive(),
+            'is_trial' => (int) $device->isOnTrial(),
             'expires_at' => $device->expires_at,
             'plan' => $device->plan_id,
             'fcm_token' => $device->fcm_token,
+            'server_time' => Carbon::now()->toISOString(),
         ]);
     }
 
@@ -78,21 +97,29 @@ final class DeviceController
         return response()->json([
             'success' => true,
             'is_verified' => (int) $device->isActive(),
+            'is_trial' => (int) $device->isOnTrial(),
             'plan' => $device->plan_id,
             'expires_at' => $device->expires_at,
             'server_time' => Carbon::now()->toISOString(),
         ]);
     }
 
-    /** POST update_my_data — update the device's profile. */
+    /**
+     * POST update_my_data — partial profile update.
+     *
+     * Every field beyond the device key is optional: the app rotates its push
+     * token by sending fcm_token alone, and edits the profile by sending
+     * full_name/phone alone. Requiring all of them 422'd token rotation, which
+     * silently cost the device its live-unlock push.
+     */
     public function updateMyData(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'device_id' => 'required|string|max:255',
             'app_name' => 'required|string|max:255',
-            'full_name' => 'required|string|max:255',
-            'phone' => 'required|string|max:255',
-            'fcm_token' => 'nullable|string',
+            'full_name' => 'sometimes|string|max:255',
+            'phone' => 'sometimes|string|max:255',
+            'fcm_token' => 'sometimes|string',
         ]);
 
         if ($validator->fails()) {
@@ -110,9 +137,9 @@ final class DeviceController
 
         $this->devices->updateProfile(
             $device,
-            (string) $request->string('full_name'),
-            (string) $request->string('phone'),
-            $request->filled('fcm_token') ? (string) $request->string('fcm_token') : null,
+            $this->optional($request, 'full_name'),
+            $this->optional($request, 'phone'),
+            $this->optional($request, 'fcm_token'),
         );
 
         return response()->json(['success' => true]);
@@ -148,6 +175,12 @@ final class DeviceController
         );
 
         return response()->json(['success' => true]);
+    }
+
+    /** A supplied non-empty field, or null when the app omitted it. */
+    private function optional(Request $request, string $key): ?string
+    {
+        return $request->filled($key) ? (string) $request->string($key) : null;
     }
 
     private function validationError(MessageBag $errors): JsonResponse

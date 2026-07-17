@@ -44,17 +44,62 @@ return [
         ],
     ],
 
+    /*
+     * Per-app settings, keyed by the `app_name` the client sends (exactly as the
+     * shipped apps send it: 'Fawateer', 'SmartAgent'). Lookup is case-insensitive.
+     *
+     * `trial_days` — length of the server-granted free trial, stamped once on first
+     * registration. **An app absent from this map, or set to 0, gets NO trial.**
+     * SmartAgent deliberately has none: its owner never asked for one, and granting
+     * it here would silently change that product's monetization.
+     *
+     * `label` — the product name used in push copy, so a Fawateer user is not asked
+     * to renew "المندوب الذكي".
+     *
+     * `slug` — the app's URL namespace, `/api/{slug}/*` (Phase D of
+     * docs/ROADMAP-APP-APIS.md). `getPlans` carries no app_name, so a shared base URL
+     * cannot serve different plans per app. Each app reads its own remote-config
+     * file, so pointing its baseUrl at `…/api/{slug}` namespaces every call it makes
+     * and needs **no store release**. The un-namespaced `/api/*` stays live for the
+     * builds still pointed at it and serves the shared catalog below.
+     *
+     * `plans` — optional per-app catalog. **Omit it and the app gets the shared
+     * `plans` list below** — which is what both apps do today, so nothing changes
+     * until a price is deliberately set here.
+     */
+    'apps' => [
+        'Fawateer' => [
+            'label' => 'فواتير',
+            'trial_days' => 30,
+            'slug' => 'fawateer',
+            // 'plans' => [...],  // ← per-app catalog; omitted = the shared list below.
+        ],
+        'SmartAgent' => [
+            'label' => 'المندوب الذكي',
+            'trial_days' => 0,
+            'slug' => 'smartagent',
+        ],
+    ],
+
     'currency' => [
         'code' => 'USD',
         'symbol' => '$',
     ],
 
+    /*
+     * `price_after_discount` is read by the shipped Fawateer plan parser; null means
+     * "no discount". Both apps read one catalog today — getPlans carries no app_name,
+     * so it cannot vary per app. Per-app pricing is Phase D of
+     * docs/ROADMAP-APP-APIS.md (namespace the shim by base URL, which the apps'
+     * separate remote-config files already allow).
+     */
     'plans' => [
         [
             'id' => 'half_year',
             'title' => 'الخطة نصف السنوية',
             'duration_months' => 6,
             'price' => 12,
+            'price_after_discount' => null,
             'enabled' => true,
             'recommended' => false,
             'description' => 'أفضل خيار للتجربة طويلة المدى',
@@ -64,6 +109,7 @@ return [
             'title' => 'الخطة السنوية',
             'duration_months' => 12,
             'price' => 20,
+            'price_after_discount' => null,
             'enabled' => true,
             'recommended' => true,
             'description' => 'الأكثر توفيراً',

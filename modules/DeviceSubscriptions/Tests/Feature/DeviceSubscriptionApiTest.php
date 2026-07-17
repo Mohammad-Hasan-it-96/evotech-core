@@ -2,6 +2,7 @@
 
 namespace Modules\DeviceSubscriptions\Tests\Feature;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
@@ -25,6 +26,8 @@ class DeviceSubscriptionApiTest extends TestCase
 
     public function test_create_device_registers_a_new_device_unverified(): void
     {
+        $this->freezeTime();
+
         $this->postJson('/api/create_device', [
             'app_name' => 'smart_agent',
             'device_id' => 'dev-1',
@@ -35,9 +38,11 @@ class DeviceSubscriptionApiTest extends TestCase
             ->assertOk()
             ->assertExactJson([
                 'is_verified' => 0,
+                'is_trial' => 0,
                 'expires_at' => null,
                 'plan' => null,
                 'fcm_token' => 'tok-1',
+                'server_time' => Carbon::now()->toISOString(),
             ]);
 
         $this->assertDatabaseHas('device_subscriptions', [
@@ -90,10 +95,286 @@ class DeviceSubscriptionApiTest extends TestCase
     {
         $this->getJson('/api/getPlans')
             ->assertOk()
+            // SmartAgent requires `success`; Fawateer ignores it. Keep sending it.
+            ->assertJsonPath('success', true)
             ->assertJsonPath('currency.code', 'USD')
+            ->assertJsonPath('currency.symbol', '$')
             ->assertJsonPath('plans.0.id', 'half_year')
             ->assertJsonPath('plans.1.id', 'yearly')
             ->assertJsonPath('plans.1.recommended', true);
+    }
+
+    /** Every field the shipped Fawateer plan parser reads must be present. */
+    public function test_get_plans_carries_every_field_the_app_parses(): void
+    {
+        $this->getJson('/api/getPlans')
+            ->assertOk()
+            ->assertJsonStructure([
+                'success',
+                'currency' => ['code', 'symbol'],
+                'plans' => [['id', 'title', 'description', 'duration_months', 'price', 'price_after_discount', 'enabled', 'recommended']],
+            ]);
+    }
+
+    /**
+     * The shipped Fawateer app rotates its push token by POSTing update_my_data
+     * with ONLY app_name + device_id + fcm_token. Requiring full_name/phone 422'd
+     * it, so the token was never refreshed and the live-unlock push silently died.
+     */
+    public function test_update_my_data_accepts_an_fcm_only_rotation(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+            'fcm_token' => 'old',
+        ]);
+
+        $this->postJson('/api/update_my_data', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'fcm_token' => 'rotated',
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'fcm_token' => 'rotated',
+            // Untouched: a partial update must not blank what it did not send.
+            'full_name' => 'Sara',
+            'phone' => '0999',
+        ]);
+    }
+
+    /** Editing the profile must not wipe the push token (it used to). */
+    public function test_update_my_data_profile_edit_preserves_the_push_token(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'fcm_token' => 'keep-me',
+        ]);
+
+        $this->postJson('/api/update_my_data', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Renamed',
+            'phone' => '0777',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'full_name' => 'Renamed',
+            'phone' => '0777',
+            'fcm_token' => 'keep-me',
+        ]);
+    }
+
+    /**
+     * The purchase intent the app files via create_device. Dropping these fields
+     * meant the operator never learned the user wanted to buy.
+     */
+    public function test_create_device_records_a_plan_request(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+            'requested_plan' => '12_months',
+            'contact_method' => 'whatsapp',
+            'status' => 'pending',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'requested_plan' => '12_months',
+            'contact_method' => 'whatsapp',
+            'status' => 'pending',
+        ]);
+    }
+
+    /** A plan request normally arrives for an already-registered device. */
+    public function test_plan_request_is_recorded_on_an_existing_device(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+        ]);
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+            'requested_plan' => '6_months',
+            'contact_method' => 'telegram',
+            'status' => 'pending',
+        ])->assertOk();
+
+        $this->assertSame(1, DeviceSubscription::query()->count());
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'requested_plan' => '6_months',
+            'status' => 'pending',
+        ]);
+    }
+
+    /** A device on a trial reports is_trial; a paid one does not. */
+    public function test_check_device_reports_trial_state(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'trial-dev',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => Carbon::now()->addDays(30),
+            'trial_expires_at' => Carbon::now()->addDays(30),
+        ]);
+
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => 'trial-dev'])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1)
+            ->assertJsonPath('is_trial', 1);
+
+        // Converting to a paid plan ends the trial without clearing any flag.
+        DeviceSubscription::query()->where('device_id', 'trial-dev')->update(['plan_id' => 'yearly']);
+
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => 'trial-dev'])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1)
+            ->assertJsonPath('is_trial', 0);
+    }
+
+    /** check_device must always carry server_time — the app's trusted clock. */
+    public function test_check_device_returns_server_time(): void
+    {
+        $this->freezeTime();
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'dev-1']);
+
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => 'dev-1'])
+            ->assertOk()
+            ->assertJsonPath('server_time', Carbon::now()->toISOString());
+    }
+
+    /**
+     * Phase B: a fresh Fawateer install is unlocked for 30 days with no operator
+     * action. The app gates on is_verified + expires_at, so the trial has to land
+     * in those fields, not in a bespoke one.
+     */
+    public function test_first_registration_grants_a_thirty_day_trial(): void
+    {
+        $this->freezeTime();
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'new-dev',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+        ])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1)
+            ->assertJsonPath('is_trial', 1)
+            ->assertJsonPath('plan', null)
+            // startOfSecond: the timestamp column has second precision.
+            ->assertJsonPath('expires_at', Carbon::now()->addDays(30)->startOfSecond()->toJSON());
+
+        $device = DeviceSubscription::query()->where('device_id', 'new-dev')->sole();
+        $this->assertNotNull($device->trial_expires_at);
+        $this->assertTrue($device->isOnTrial());
+    }
+
+    /**
+     * The anti-abuse anchor: ANDROID_ID survives uninstall and data-clear, so a
+     * reinstall re-registers the same device_id and must NOT mint a second trial.
+     */
+    public function test_reinstall_cannot_farm_a_second_trial(): void
+    {
+        $expired = Carbon::now()->subDay()->startOfSecond();
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => $expired,
+            'trial_expires_at' => $expired,
+        ]);
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+        ])
+            ->assertOk()
+            // Trial already spent: still expired, still locked.
+            ->assertJsonPath('is_verified', 0)
+            ->assertJsonPath('is_trial', 0);
+
+        $this->assertSame(1, DeviceSubscription::query()->count());
+
+        $expiresAt = DeviceSubscription::query()->where('device_id', 'dev-1')->sole()->expires_at;
+        $this->assertNotNull($expiresAt);
+        $this->assertTrue(
+            $expired->equalTo($expiresAt),
+            'The spent trial expiry must not be extended by re-registering.',
+        );
+    }
+
+    /** SmartAgent configures no trial — registering must not grant one. */
+    public function test_smart_agent_registration_grants_no_trial(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'SmartAgent',
+            'device_id' => 'sa-1',
+            'full_name' => 'Ali',
+            'phone' => '0111',
+        ])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 0)
+            ->assertJsonPath('is_trial', 0)
+            ->assertJsonPath('expires_at', null);
+
+        $this->assertNull(DeviceSubscription::query()->where('device_id', 'sa-1')->sole()->trial_expires_at);
+    }
+
+    /** An app with no config entry inherits nobody's trial. */
+    public function test_unknown_app_grants_no_trial(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'SomeFutureApp',
+            'device_id' => 'x-1',
+            'full_name' => 'Nobody',
+            'phone' => '0000',
+        ])->assertOk()->assertJsonPath('is_trial', 0);
+    }
+
+    /** Operator activation converts a trial to paid — no new endpoint, no flag to clear. */
+    public function test_operator_activation_converts_a_trial_to_paid(): void
+    {
+        $trialEnd = Carbon::now()->addDays(30);
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => $trialEnd,
+            'trial_expires_at' => $trialEnd,
+            'status' => 'pending',
+            'requested_plan' => '12_months',
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', ['device_id' => 'dev-1', 'plan_id' => 'yearly'])->assertOk();
+
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => 'dev-1'])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1)
+            ->assertJsonPath('is_trial', 0)
+            ->assertJsonPath('plan', 'yearly');
+
+        // trial_expires_at is retained as the record that a trial was already used.
+        $this->assertNotNull(DeviceSubscription::query()->where('device_id', 'dev-1')->sole()->trial_expires_at);
     }
 
     public function test_add_review_stores_rating(): void
@@ -161,6 +442,374 @@ class DeviceSubscriptionApiTest extends TestCase
                 'meta',
                 'links',
             ]);
+    }
+
+    /** Phase C: the operator's work queue — devices with an open purchase intent. */
+    public function test_staff_can_filter_the_pending_request_queue(): void
+    {
+        DeviceSubscription::factory()->create(['device_id' => 'wants-to-buy', 'status' => 'pending']);
+        DeviceSubscription::factory()->count(2)->create(['status' => null]);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions?status=pending')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.device_id', 'wants-to-buy')
+            ->assertJsonPath('data.0.status', 'pending');
+    }
+
+    /** Several apps share this deployment; the console must separate them. */
+    public function test_staff_can_filter_by_app(): void
+    {
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'f-1']);
+        DeviceSubscription::factory()->create(['app_name' => 'SmartAgent', 'device_id' => 's-1']);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions?app_name=Fawateer')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.device_id', 'f-1');
+    }
+
+    /** A customer messages on WhatsApp: the operator searches by what they have. */
+    public function test_staff_can_search_by_phone_name_or_device_id(): void
+    {
+        DeviceSubscription::factory()->create([
+            'device_id' => 'dev-abc',
+            'full_name' => 'Sara Ahmad',
+            'phone' => '0999123',
+        ]);
+        DeviceSubscription::factory()->create(['device_id' => 'other', 'full_name' => 'Ali', 'phone' => '0777']);
+
+        $this->actAsStaff();
+
+        foreach (['0999123', 'Sara', 'dev-abc'] as $term) {
+            $this->getJson('/api/v1/device-subscriptions?q='.$term)
+                ->assertOk()
+                ->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.device_id', 'dev-abc');
+        }
+    }
+
+    /** Activating a device fulfils and closes its request, draining the queue. */
+    public function test_activation_closes_the_pending_request(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'status' => 'pending',
+            'requested_plan' => '12_months',
+            'contact_method' => 'whatsapp',
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', ['device_id' => 'dev-1', 'plan_id' => 'yearly'])->assertOk();
+
+        $this->getJson('/api/v1/device-subscriptions?status=pending')->assertOk()->assertJsonCount(0, 'data');
+
+        $device = DeviceSubscription::query()->where('device_id', 'dev-1')->sole();
+        $this->assertNull($device->status);
+        // Retained: the operator may have sold a plan other than the one requested.
+        $this->assertSame('12_months', $device->requested_plan);
+    }
+
+    /** The console reads the plan request and trial state off the staff resource. */
+    public function test_staff_resource_exposes_request_and_trial_fields(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => Carbon::now()->addDays(30),
+            'trial_expires_at' => Carbon::now()->addDays(30),
+            'status' => 'pending',
+            'requested_plan' => '12_months',
+            'contact_method' => 'whatsapp',
+        ]);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions')
+            ->assertOk()
+            ->assertJsonPath('data.0.is_trial', true)
+            ->assertJsonPath('data.0.is_active', true)
+            ->assertJsonPath('data.0.status', 'pending')
+            ->assertJsonPath('data.0.requested_plan', '12_months')
+            ->assertJsonPath('data.0.contact_method', 'whatsapp');
+    }
+
+    /** The console activates against the same catalog the apps see. */
+    public function test_staff_plan_catalog_is_enveloped_and_requires_auth(): void
+    {
+        $this->getJson('/api/v1/device-subscriptions/plans')->assertUnauthorized();
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions/plans')
+            ->assertOk()
+            ->assertJsonPath('data.currency.code', 'USD')
+            ->assertJsonPath('data.plans.0.id', 'half_year')
+            ->assertJsonPath('data.plans.1.id', 'yearly');
+    }
+
+    // --- The shared fallback id is a bucket, not a device --------------------
+
+    /**
+     * `fallback_device_id` is what every client sends when it cannot read its real
+     * id — one literal, shared by every such device and every app. Trialling it
+     * would let the first arrival consume a trial the rest inherit: they would land
+     * on day one already holding a stranger's expiry.
+     */
+    public function test_fallback_device_id_is_never_granted_a_trial(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'fallback_device_id',
+            'full_name' => 'Unknown Device',
+            'phone' => '0999',
+        ])->assertOk()->assertJson(['is_verified' => 0, 'is_trial' => 0, 'expires_at' => null]);
+
+        $device = DeviceSubscription::query()->where('device_id', 'fallback_device_id')->sole();
+        $this->assertNull($device->trial_expires_at);
+    }
+
+    /** A real device beside it still gets its trial — quarantine is not a blanket. */
+    public function test_a_real_device_is_still_trialled_alongside_the_fallback(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer', 'device_id' => 'fallback_device_id',
+            'full_name' => 'A', 'phone' => '01',
+        ])->assertOk();
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer', 'device_id' => 'real-hashed-id',
+            'full_name' => 'B', 'phone' => '02',
+        ])->assertOk()->assertJson(['is_verified' => 1, 'is_trial' => 1]);
+    }
+
+    /** Activating the bucket would license every device that landed in it. */
+    public function test_fallback_device_id_cannot_be_activated_via_the_legacy_shim(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'fallback_device_id',
+            'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', [
+            'device_id' => 'fallback_device_id',
+            'plan_id' => 'yearly',
+        ])->assertNotFound();
+
+        $device = DeviceSubscription::query()->where('device_id', 'fallback_device_id')->sole();
+        $this->assertFalse($device->is_verified);
+        $this->assertNull($device->plan_id);
+    }
+
+    /** Same rule on the console's own endpoint, which binds the row directly. */
+    public function test_fallback_device_id_cannot_be_activated_via_the_console(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'fallback_device_id',
+            'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$device->uuid}/activate", ['plan_id' => 'yearly'])
+            ->assertStatus(422);
+
+        $this->assertFalse($device->refresh()->is_verified);
+    }
+
+    // --- Activation acts on the row the operator chose -----------------------
+
+    /**
+     * The console binds a row, so that row must be the one activated. It used to
+     * pass the row's device_id to a service that re-queried by id alone — where an
+     * id is not unique that activates a stranger and reports failure for the row
+     * the operator picked.
+     */
+    public function test_console_activates_the_bound_row_not_another_app_sharing_the_id(): void
+    {
+        $fawateer = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+        $smartAgent = DeviceSubscription::factory()->create([
+            'app_name' => 'SmartAgent', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$smartAgent->uuid}/activate", ['plan_id' => 'yearly'])
+            ->assertOk()
+            ->assertJsonPath('data.app_name', 'SmartAgent')
+            ->assertJsonPath('data.is_verified', true);
+
+        $this->assertTrue($smartAgent->refresh()->is_verified);
+        // The other product's device must be untouched.
+        $this->assertFalse($fawateer->refresh()->is_verified);
+    }
+
+    /** The legacy shim can be scoped to one product when the caller knows it. */
+    public function test_legacy_activation_can_be_scoped_by_app_name(): void
+    {
+        $fawateer = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+        $smartAgent = DeviceSubscription::factory()->create([
+            'app_name' => 'SmartAgent', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', [
+            'device_id' => 'shared-id',
+            'app_name' => 'SmartAgent',
+            'plan_id' => 'yearly',
+        ])->assertOk();
+
+        $this->assertTrue($smartAgent->refresh()->is_verified);
+        $this->assertFalse($fawateer->refresh()->is_verified);
+    }
+
+    // --- The anti-farm anchor is enforced by the database --------------------
+
+    /**
+     * The trial is unfarmable only because a reinstall finds the existing row.
+     * That rests on one row per (app_name, device_id) — so the database, not a
+     * find-then-create race, decides it.
+     */
+    public function test_device_identity_is_unique_per_app(): void
+    {
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'dup']);
+
+        $this->expectException(QueryException::class);
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'dup']);
+    }
+
+    /** The same phone in two products is two subscriptions, not a clash. */
+    public function test_the_same_device_id_in_two_apps_is_allowed(): void
+    {
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'same']);
+        DeviceSubscription::factory()->create(['app_name' => 'SmartAgent', 'device_id' => 'same']);
+
+        $this->assertSame(2, DeviceSubscription::query()->where('device_id', 'same')->count());
+    }
+
+    /**
+     * Phase D. getPlans carries no app_name, so a shared base URL cannot serve
+     * different plans per app. The slug supplies it instead — and because each app
+     * reads its own remote-config base URL, moving onto it needs no store release.
+     */
+    public function test_namespaced_get_plans_serves_the_apps_own_catalog(): void
+    {
+        config()->set('device-subscriptions.apps.Fawateer.plans', [
+            ['id' => 'monthly', 'title' => 'شهري', 'duration_months' => 1, 'price' => 19,
+                'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
+        ]);
+
+        $this->getJson('/api/fawateer/getPlans')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonCount(1, 'plans')
+            ->assertJsonPath('plans.0.id', 'monthly')
+            ->assertJsonPath('plans.0.price', 19);
+
+        // The un-namespaced surface is unchanged for builds still pointed at it.
+        $this->getJson('/api/getPlans')
+            ->assertOk()
+            ->assertJsonPath('plans.0.id', 'half_year');
+    }
+
+    /** An app with no catalog of its own falls back to the shared list. */
+    public function test_namespaced_app_without_own_plans_falls_back_to_shared(): void
+    {
+        $this->getJson('/api/smartagent/getPlans')
+            ->assertOk()
+            ->assertJsonPath('plans.0.id', 'half_year')
+            ->assertJsonPath('plans.1.id', 'yearly');
+    }
+
+    /** A typo'd base URL degrades to the shared catalog, never an error. */
+    public function test_unknown_slug_serves_the_shared_catalog(): void
+    {
+        $this->getJson('/api/not-an-app/getPlans')
+            ->assertOk()
+            ->assertJsonPath('plans.0.id', 'half_year');
+    }
+
+    /** The whole shim is reachable under the namespace — the app moves wholesale. */
+    public function test_namespaced_surface_serves_the_whole_shim(): void
+    {
+        $this->postJson('/api/fawateer/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'ns-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+        ])->assertOk()->assertJsonPath('is_trial', 1);
+
+        $this->postJson('/api/fawateer/check_device', ['app_name' => 'Fawateer', 'device_id' => 'ns-1'])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1);
+
+        $this->postJson('/api/fawateer/update_my_data', [
+            'app_name' => 'Fawateer', 'device_id' => 'ns-1', 'fcm_token' => 'tok',
+        ])->assertOk();
+    }
+
+    /** The {app} segment must never swallow the versioned platform API. */
+    public function test_namespace_does_not_shadow_the_v1_api(): void
+    {
+        $this->getJson('/api/v1/health')->assertOk();
+
+        // v1 is excluded from the slug pattern, so this is a miss, not a plan list.
+        $this->getJson('/api/v1/getPlans')->assertNotFound();
+    }
+
+    /**
+     * The term must be read from the device's own catalog: the same id can mean a
+     * different number of months per app, and the wrong one sets the wrong expiry.
+     */
+    public function test_activation_uses_the_devices_own_app_catalog(): void
+    {
+        config()->set('device-subscriptions.apps.Fawateer.plans', [
+            ['id' => 'yearly', 'title' => 'سنوي', 'duration_months' => 1, 'price' => 19,
+                'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
+        ]);
+
+        // Same plan id in both apps; Fawateer's is 1 month, the shared one 12.
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'f-1']);
+        DeviceSubscription::factory()->create(['app_name' => 'SmartAgent', 'device_id' => 's-1']);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', ['device_id' => 'f-1', 'app_name' => 'Fawateer', 'plan_id' => 'yearly'])->assertOk();
+        $this->postJson('/api/activateDevice', ['device_id' => 's-1', 'app_name' => 'SmartAgent', 'plan_id' => 'yearly'])->assertOk();
+
+        $fawateer = DeviceSubscription::query()->where('device_id', 'f-1')->sole()->expires_at;
+        $smartAgent = DeviceSubscription::query()->where('device_id', 's-1')->sole()->expires_at;
+        $this->assertNotNull($fawateer);
+        $this->assertNotNull($smartAgent);
+
+        $this->assertEqualsWithDelta(30, Carbon::now()->diffInDays($fawateer), 2);
+        $this->assertEqualsWithDelta(365, Carbon::now()->diffInDays($smartAgent), 2);
+    }
+
+    /** The console asks for the catalog of the app it is activating. */
+    public function test_staff_plan_catalog_can_be_scoped_to_an_app(): void
+    {
+        config()->set('device-subscriptions.apps.Fawateer.plans', [
+            ['id' => 'monthly', 'title' => 'شهري', 'duration_months' => 1, 'price' => 19,
+                'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
+        ]);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions/plans?app_name=Fawateer')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.plans')
+            ->assertJsonPath('data.plans.0.id', 'monthly');
+
+        $this->getJson('/api/v1/device-subscriptions/plans?app_name=SmartAgent')
+            ->assertOk()
+            ->assertJsonPath('data.plans.0.id', 'half_year');
     }
 
     public function test_sweep_expiry_command_runs(): void
