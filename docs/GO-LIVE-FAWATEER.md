@@ -3,22 +3,28 @@
 > **Verified live:** 2026-07-17 against `https://api.evotech-sys.com` and the legacy
 > backend. Every claim below was tested, not assumed.
 >
-> ## ✅ Verdict: Fawateer can be cut over now. SmartAgent cannot.
+> ## ✅ Verdict: Fawateer is unblocked entirely. SmartAgent is the careful one.
 >
-> **Correcting an earlier claim in this document.** I first reported "2 paying Fawateer
-> customers" — that was wrong. I read `is_verified = 1` as "paying". It is not.
+> **Fawateer has not been released.** Its only three devices on the old backend are the
+> owner's and testers' (confirmed 2026-07-17). There is **no install base, no customer,
+> and no purchase** — not one Fawateer device even has a `plan_id`.
 >
-> **Not one Fawateer device has a `plan_id`. Nobody has bought anything.** The two
-> verified rows are: one with **no expiry at all** (permanent — almost certainly your own
-> device) and one hand-granted 30-day trial. The third is literally `probe_test_123`.
+> Two consequences, and they are large:
 >
-> So for **Fawateer** the import is *housekeeping*, not a blocker — worst case those
-> devices re-register and get a fresh 30-day trial, and you re-activate them in the
-> console in seconds. Nobody can lose a purchase that was never made.
+> 1. **Nothing has to be imported for Fawateer.** Those three rows are test data. Skip
+>    them, or import and delete them. §5.1 is a **SmartAgent** concern, not a Fawateer one.
+> 2. **The app is not frozen.** Every "we cannot change the app" constraint in these docs
+>    applies to *SmartAgent* (shipped, 43 devices). For Fawateer the base URL and the
+>    config URL are both `static const` in source — change them and rebuild. **See §5.0:
+>    this is how you get off Google Drive at zero cost.**
 >
-> **SmartAgent is the exact opposite: 11 verified devices, all 11 holding a real plan**
-> (`yearly` ×9, `half_year` ×2). Those are paying customers, and it has **no trial** to
-> cushion a mistake. **Import is mandatory before SmartAgent's cutover.**
+> **SmartAgent is the opposite: 11 verified devices, all 11 holding a real plan**
+> (`yearly` ×9, `half_year` ×2), it is genuinely shipped, and it has **no trial** to
+> cushion a mistake. **Import is mandatory before its cutover.**
+>
+> *Two corrections are recorded honestly below rather than quietly edited away:
+> "2 paying Fawateer customers" (§2 — `is_verified` ≠ paying) and "you must use the Drive
+> JSON" (§5.0 — true only for SmartAgent).*
 
 ---
 
@@ -119,10 +125,45 @@ it stays open for as long as that server runs. **Retire it once cutover complete
 
 ## 5. What's left — in order
 
-### 🔴 1. Import the legacy devices
+### 🟢 0. Fawateer: drop Google Drive before you release — **do this first**
 
-Mandatory before **SmartAgent**; housekeeping for **Fawateer**. Do all 50 in one pass —
-importing early costs nothing and removes the risk from every later cutover.
+**Correcting earlier advice in this document.** I said the Drive JSON was unavoidable
+because the config URL is baked into the app. **That is true only of SmartAgent.**
+Fawateer is unreleased, so both constants are yours to change:
+
+```dart
+// lib/core/network/api_config.dart:15
+static const String defaultBaseUrl = 'https://api.evotech-sys.com/api/fawateer';
+
+// lib/core/config/remote_config_service.dart:27
+static const String _configUrl = 'https://evotech-sys.com/config/fawateer.json';
+```
+
+Then rebuild. **Google Drive is out of Fawateer's life permanently**, and the cutover
+stops being a cutover at all — the first public build simply ships pointing at the right
+server. No flip, no rollback plan, no `harrypotter` dependency.
+
+**Keep the remote-config *mechanism*, just not Drive's hosting.** It is what lets you
+move servers later without a store release, and it is free to keep. Two notes on hosting
+it yourself:
+
+- Serve it from the **web** host (`evotech-sys.com`), not the API host. If it lived on
+  the API and the API went down, the config that tells the app where the API lives would
+  go down with it.
+- `defaultBaseUrl` is the fallback when the fetch fails, so point it at the real server
+  too (above). Today it points at `harrypotter` — the reason a failed config fetch
+  silently sends users to the old backend.
+
+**This is only open while Fawateer is unreleased.** The day it ships, this becomes a
+store release. Doing it now costs one rebuild.
+
+### 🔴 1. Import the legacy devices — **SmartAgent, not Fawateer**
+
+**Not needed for Fawateer** — its three rows are test devices for an unreleased app.
+This is entirely about **SmartAgent's 11 paying customers** (plus `daftar_hesabat`'s 1
+and `Smart Agent`'s 1), and it is mandatory before *that* cutover. Do all 50 in one pass
+anyway: importing early costs nothing, and the Fawateer/`test` rows can be deleted from
+the console afterwards.
 
 #### The schema difference — there isn't one that matters
 
@@ -276,22 +317,28 @@ Harmless if left — it just clutters the list.
 
 ## 6. So — can you connect Fawateer right now?
 
-**Technically yes. Safely, no — not until §5.1.**
+**Yes. Nothing is blocking it.**
 
-The API answers every call correctly. But 2 paying Fawateer customers exist only on the
-old backend, and the trial would paper over their loss for exactly 30 days.
+The API answers every call correctly on production (§1), and there is no install base to
+protect — no customer, no purchase, nothing to import.
 
-**The sequence is short:**
+**Do it in the build, not in a JSON** (§5.0):
 
-1. Import the 50 legacy rows.
-2. Verify one real paying Fawateer device: `check_device` should come back
-   `is_verified:1` with **its original expiry** — not a fresh trial. *That single check
-   proves the import worked.*
-3. Edit `fawateer_version.json` → `"baseUrl": "https://api.evotech-sys.com/api/fawateer"`.
-4. Watch that `check_device` never returns `5xx` — a 500 doesn't show an error, it
-   silently locks users out.
+1. Point `defaultBaseUrl` at `https://api.evotech-sys.com/api/fawateer` and `_configUrl`
+   at your own domain. Rebuild.
+2. Run the app. Register → expect `is_verified:1`, `is_trial:1`, expiry +30 days.
+3. In the console (`/dashboard/devices`) the device appears. Activate it → the app
+   unlocks on its next `check_device`.
+4. Delete the old test rows and my smoke-test row.
 
-**Rollback** is restoring the old `baseUrl`, effective on each app's next config fetch.
+That is the whole thing. **No flip, no rollback plan, no `harrypotter`.**
+
+If you would rather test against the new server *without* rebuilding first, editing the
+Drive JSON still works and remains reversible — just don't ship the released app
+depending on it.
+
+⚠️ Whichever route: watch that `check_device` never returns `5xx`. A 500 shows users no
+error — it silently locks them out.
 
 ---
 

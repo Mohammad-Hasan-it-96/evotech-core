@@ -6,37 +6,41 @@
 > running API, not a sketch.
 > **Audience:** whoever points the app at the new server, and anyone touching either side.
 
-> ## 🚨 NOT DEPLOYED YET — do not repoint the app
+> ## ✅ Live and verified — 2026-07-17
 >
-> As of 2026-07-17, `https://api.evotech-sys.com` is **healthy but running older code**:
-> `/api/v1/health` and `/api/v1/products` answer `200`, while **every endpoint in this
-> document returns `404`.** The VPS has not pulled `main`.
->
-> **Repointing the Drive JSON now would lock out every user.** `check_device` would
-> 404, the app reads any non-2xx as "not verified", and the entire install base gates
-> to the activation screen — silently, with no error to explain it.
->
-> Deploy and re-verify first (§8). The commands are in that section.
+> Every endpoint below was tested against `https://api.evotech-sys.com` and returns the
+> documented shape. Migrations are applied and the trial fires. **Fawateer is clear to
+> connect** — it is unreleased, so there is no install base to protect.
 
 ---
 
-## 0. TL;DR — the app needs no code changes
+## 0. TL;DR — change two constants and rebuild
 
-The platform was built to match the app **exactly as shipped**. Going live is
-**one edit** to the app's remote-config JSON:
+The platform already matches what the app sends, so **no request or parsing code
+changes**. Because Fawateer is **not yet released**, point it at the new server in the
+build itself rather than via a remote flip:
 
-```jsonc
-// fawateer_version.json — Drive file id 1pVMkNYKAGjiO8tRSG3nEcVGvEQS8xcVk
-{
-  "baseUrl": "https://api.evotech-sys.com/api/fawateer"
-}
+```dart
+// lib/core/network/api_config.dart:15
+static const String defaultBaseUrl = 'https://api.evotech-sys.com/api/fawateer';
+
+// lib/core/config/remote_config_service.dart:27  — off Google Drive, onto your own domain
+static const String _configUrl = 'https://evotech-sys.com/config/fawateer.json';
 ```
 
-Nothing else moves. No store release. **Rollback is putting the old value back.**
+That is the whole integration. **Keep the remote-config mechanism** — it is what lets you
+move servers later without a store release — just host the JSON yourself, on the **web**
+host rather than the API host (so an API outage cannot take down the config that says
+where the API is).
+
+> Editing the Drive JSON (`fawateer_version.json`, id `1pVMkNYKAGjiO8tRSG3nEcVGvEQS8xcVk`)
+> also still works, and is handy for testing against the new server before you rebuild.
+> Just don't let the **released** app depend on Drive — that dependency is only
+> removable while the app is unreleased.
 
 Use the **`/api/fawateer`** namespace, not bare `/api` — same contract, but it lets the
-platform serve Fawateer its own plans later without ever touching the app again
-(§7). Both work today and return identical data.
+platform serve Fawateer its own plans later without ever touching the app again (§7).
+Both work today and return identical data.
 
 ---
 
@@ -291,12 +295,25 @@ degrade. Always sent.
 
 ## 8. Cutover
 
-**Order is not negotiable.** Step 4 is the only irreversible-feeling one, and it is the
-last for a reason: everything before it is invisible to users.
+### Fawateer — there is no cutover
 
-### 1. Deploy the API — **not done yet**
+It is unreleased with no install base, so §0 *is* the integration: set the two
+constants, rebuild, ship. Nothing to import, nothing to flip, nothing to roll back.
 
-On the VPS, in the Laravel site (`api.evotech-sys.com`):
+### SmartAgent — later, and carefully
+
+That one **is** shipped: 43 devices, **11 holding real paid plans**, and **no trial** to
+soften a mistake. Its config URL is baked into a released build, so the Drive JSON is the
+only lever — and its devices **must be imported before** its base URL moves, or paying
+customers are locked out on their next check. See
+[`GO-LIVE-FAWATEER.md`](../GO-LIVE-FAWATEER.md) §5.1.
+
+**Cut the two apps separately.** They read separate config files; that is what keeps a
+bad cutover contained to one product.
+
+### 1. Deploy the API — ✅ done (verified 2026-07-17)
+
+For reference, on the VPS in the Laravel site (`api.evotech-sys.com`):
 
 ```bash
 git pull origin main          # brings the DeviceSubscriptions module
@@ -319,28 +336,26 @@ curl -s -X POST https://api.evotech-sys.com/api/fawateer/check_device \
 That 404 is the **success** signal: the route exists and answered in the legacy shape.
 A 404 with HTML, or any 500, means step 1 is incomplete — stop.
 
-### 3. Import the legacy rows
+### 3. Import the legacy rows — **SmartAgent only**
 
 ```bash
 DEVICE_LEGACY_CONNECTION=legacy php artisan device-subscriptions:import-legacy --dry-run
 DEVICE_LEGACY_CONNECTION=legacy php artisan device-subscriptions:import-legacy
 ```
 
-Re-runnable (upserts on the device identity). Do this **before** step 4 so existing
-subscribers are already known the moment their app switches over — otherwise a paying
-customer's first `check_device` on the new server 404s and locks them out.
+Re-runnable (upserts on the device identity). **Fawateer needs none of this** — its three
+legacy rows are test devices for an unreleased app. This exists for SmartAgent's 11
+paying customers, and it must run **before** their base URL moves: otherwise their first
+`check_device` on the new server 404s, and with no trial to soften it they are locked out
+immediately.
 
-### 4. Flip the base URL
+### 4. Point the app at the new server
 
-Only now, edit `fawateer_version.json` (Drive id `1pVMkNYKAGjiO8tRSG3nEcVGvEQS8xcVk`):
+**Fawateer:** in the build (§0). Ship it pointing at the right server.
 
-```jsonc
-{ "baseUrl": "https://api.evotech-sys.com/api/fawateer" }
-```
-
-**Cut Fawateer and SmartAgent separately** — they read separate config files, so a bad
-cutover stays contained to one app. **Rollback is restoring the one old value**, and it
-takes effect on each app's next config fetch.
+**SmartAgent:** the Drive JSON is the only lever for a released app — and only after
+step 3. **Rollback is restoring the one old value**, effective on each app's next config
+fetch.
 
 ### 5. Watch
 
