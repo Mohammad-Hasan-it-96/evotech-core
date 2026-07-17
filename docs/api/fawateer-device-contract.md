@@ -37,6 +37,12 @@ where the API is).
 > also still works, and is handy for testing against the new server before you rebuild.
 > Just don't let the **released** app depend on Drive — that dependency is only
 > removable while the app is unreleased.
+>
+> ⚠️ **The URL lives at `api.base_url`, not a top-level `baseUrl`** — see the schema in
+> §9. Get that key wrong and the parse yields an empty string, the assignment is skipped
+> (`if (cfg.baseUrl.isNotEmpty)`), and the app **silently keeps using the old server**
+> while the edit looks successful. Edit the existing file's value; never replace the file
+> wholesale, or you also drop `latest_version`, `downloads` and `support`.
 
 Use the **`/api/fawateer`** namespace, not bare `/api` — same contract, but it lets the
 platform serve Fawateer its own plans later without ever touching the app again (§7).
@@ -361,3 +367,50 @@ fetch.
 
 The first thing to check is that `check_device` keeps answering `200`/`404` and never
 `5xx`. A 500 here does not show an error to users — it silently locks them out.
+
+---
+
+## 9. The remote-config file
+
+Fetched at startup from `_configUrl` and parsed by `RemoteConfig.fromJson`
+(`lib/core/config/remote_config.dart`). It drives **two** things: the API base URL, and
+the in-app update prompt.
+
+```json
+{
+  "latest_version": "1.0.0",
+  "api": {
+    "base_url": "https://api.evotech-sys.com/api/fawateer"
+  },
+  "downloads": {
+    "arm64-v8a": "https://evotech-sys.com/downloads/fawateer-1.0.0-arm64-v8a.apk",
+    "armeabi-v7a": "https://evotech-sys.com/downloads/fawateer-1.0.0-armeabi-v7a.apk"
+  },
+  "update_notes": [
+    "أول إصدار عام",
+    "تجربة مجانية 30 يوماً"
+  ],
+  "support": {
+    "email": "mohamad.hasan.it.96@gmail.com",
+    "whatsapp": "963959027196",
+    "telegram": "https://t.me/+963959027196"
+  }
+}
+```
+
+| Key | Effect if wrong/missing |
+|---|---|
+| `api.base_url` | **The dangerous one.** Empty ⇒ assignment skipped ⇒ app silently keeps `defaultBaseUrl` |
+| `latest_version` | Update prompt never fires |
+| `downloads` | Update prompt has no APK to offer |
+| `update_notes` | "What's new" is empty |
+| `support` | Falls back to the constants baked into `ApiConfig` |
+
+Parsing is **defensive by design** — a malformed field degrades to a default rather than
+throwing, so a bad publish cannot hard-fail startup. The flip side is that mistakes are
+**silent**: after editing, verify from the app, not from the file.
+
+> **This is the same data the Download Center already models** — releases, per-platform
+> artifacts, and a `notes` column. Generating this JSON from the dashboard, rather than
+> hand-editing it, is the natural end state. See
+> [`ROADMAP-DASHBOARD.md`](../ROADMAP-DASHBOARD.md) Phases 3–4.
