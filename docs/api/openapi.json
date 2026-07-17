@@ -2329,6 +2329,7 @@
         "/v1/device-subscriptions": {
             "get": {
                 "operationId": "v1.device-subscriptions.index",
+                "description": "Backs the operator console: `status=pending` is the work queue (purchase\nintents filed from the app), `app_name` separates the products sharing this\ndeployment, and `q` searches the columns an operator has to hand when a\ncustomer contacts them over WhatsApp \u2014 their phone, name, or device id.",
                 "summary": "GET /api/v1/device-subscriptions \u2014 paginated, enveloped listing",
                 "tags": [
                     "DeviceAdmin"
@@ -2478,6 +2479,55 @@
                                         "data",
                                         "links",
                                         "meta"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/device-subscriptions/plans": {
+            "get": {
+                "operationId": "v1.device-subscriptions.plans",
+                "description": "The same config catalog the apps see, so the operator can only pick a plan\nid the device will actually recognise. Staff-scoped rather than reusing the\nlegacy shim's public getPlans, which Phase E retires.",
+                "summary": "GET /api/v1/device-subscriptions/plans \u2014 the catalog the operator activates\nagainst",
+                "tags": [
+                    "DeviceAdmin"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "currency": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "plans": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                }
+                                            },
+                                            "required": [
+                                                "currency",
+                                                "plans"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
                                     ]
                                 }
                             }
@@ -6311,6 +6361,9 @@
                     "is_active": {
                         "type": "boolean"
                     },
+                    "is_trial": {
+                        "type": "boolean"
+                    },
                     "plan_id": {
                         "type": [
                             "string",
@@ -6319,6 +6372,28 @@
                     },
                     "expires_at": {
                         "type": "string"
+                    },
+                    "trial_expires_at": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The open purchase intent the operator acts on (see the console)."
+                    },
+                    "requested_plan": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "contact_method": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "stars": {
                         "type": [
@@ -6334,6 +6409,9 @@
                     },
                     "created_at": {
                         "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
                     }
                 },
                 "required": [
@@ -6344,11 +6422,17 @@
                     "phone",
                     "is_verified",
                     "is_active",
+                    "is_trial",
                     "plan_id",
                     "expires_at",
+                    "trial_expires_at",
+                    "status",
+                    "requested_plan",
+                    "contact_method",
                     "stars",
                     "comment",
-                    "created_at"
+                    "created_at",
+                    "updated_at"
                 ],
                 "title": "DeviceSubscriptionResource"
             },

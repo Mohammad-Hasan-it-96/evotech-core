@@ -171,6 +171,10 @@ final class DeviceSubscriptionService
             'is_verified' => true,
             'plan_id' => $planId,
             'expires_at' => $expiresAt,
+            // Closes the purchase intent this activation fulfils, so the console's
+            // pending queue drains. `requested_plan` stays as the record of what
+            // was asked for — the operator may have sold a different plan.
+            'status' => null,
         ]);
 
         DeviceActivated::dispatch($device);

@@ -2,11 +2,13 @@
 
 namespace Modules\DeviceSubscriptions\Http\Controllers;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Validator;
 use Modules\Core\Http\Controllers\ApiController;
+use Modules\DeviceSubscriptions\Application\Services\DevicePlanCatalog;
 use Modules\DeviceSubscriptions\Application\Services\DeviceSubscriptionService;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 use Modules\DeviceSubscriptions\Http\Resources\DeviceSubscriptionResource;
@@ -67,14 +69,63 @@ final class DeviceAdminController extends ApiController
 
     // --- Versioned staff API (auth:sanctum), platform envelope ----------------
 
-    /** GET /api/v1/device-subscriptions — paginated, enveloped listing. */
+    /**
+     * GET /api/v1/device-subscriptions — paginated, enveloped listing.
+     *
+     * Backs the operator console: `status=pending` is the work queue (purchase
+     * intents filed from the app), `app_name` separates the products sharing this
+     * deployment, and `q` searches the columns an operator has to hand when a
+     * customer contacts them over WhatsApp — their phone, name, or device id.
+     */
     public function indexV1(Request $request): AnonymousResourceCollection
     {
         $perPage = min(max($request->integer('per_page', 15), 1), 100);
 
-        return DeviceSubscriptionResource::collection(
-            DeviceSubscription::query()->latest()->paginate($perPage)
-        );
+        $devices = DeviceSubscription::query()
+            ->when(
+                $request->filled('status'),
+                fn (Builder $query): Builder => $query->where('status', (string) $request->string('status')),
+            )
+            ->when(
+                $request->filled('app_name'),
+                fn (Builder $query): Builder => $query->where('app_name', (string) $request->string('app_name')),
+            )
+            ->when(
+                $request->filled('q'),
+                function (Builder $query) use ($request): Builder {
+                    $term = '%'.(string) $request->string('q').'%';
+
+                    return $query->where(fn (Builder $inner): Builder => $inner
+                        ->where('device_id', 'like', $term)
+                        ->orWhere('full_name', 'like', $term)
+                        ->orWhere('phone', 'like', $term));
+                },
+            )
+            ->latest()
+            ->paginate($perPage)
+            ->withQueryString();
+
+        return DeviceSubscriptionResource::collection($devices);
+    }
+
+    /**
+     * GET /api/v1/device-subscriptions/plans — the catalog the operator activates
+     * against.
+     *
+     * The same config catalog the apps see, so the operator can only pick a plan
+     * id the device will actually recognise. Staff-scoped rather than reusing the
+     * legacy shim's public getPlans, which Phase E retires.
+     */
+    public function plansV1(DevicePlanCatalog $plans): JsonResponse
+    {
+        $payload = $plans->payload();
+
+        return response()->json([
+            'data' => [
+                'currency' => $payload['currency'] ?? null,
+                'plans' => $payload['plans'] ?? [],
+            ],
+        ]);
     }
 
     /** POST /api/v1/device-subscriptions/{deviceSubscription}/activate. */

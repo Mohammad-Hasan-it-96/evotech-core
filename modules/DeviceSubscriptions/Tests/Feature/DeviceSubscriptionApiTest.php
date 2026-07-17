@@ -443,6 +443,113 @@ class DeviceSubscriptionApiTest extends TestCase
             ]);
     }
 
+    /** Phase C: the operator's work queue — devices with an open purchase intent. */
+    public function test_staff_can_filter_the_pending_request_queue(): void
+    {
+        DeviceSubscription::factory()->create(['device_id' => 'wants-to-buy', 'status' => 'pending']);
+        DeviceSubscription::factory()->count(2)->create(['status' => null]);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions?status=pending')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.device_id', 'wants-to-buy')
+            ->assertJsonPath('data.0.status', 'pending');
+    }
+
+    /** Several apps share this deployment; the console must separate them. */
+    public function test_staff_can_filter_by_app(): void
+    {
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'f-1']);
+        DeviceSubscription::factory()->create(['app_name' => 'SmartAgent', 'device_id' => 's-1']);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions?app_name=Fawateer')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.device_id', 'f-1');
+    }
+
+    /** A customer messages on WhatsApp: the operator searches by what they have. */
+    public function test_staff_can_search_by_phone_name_or_device_id(): void
+    {
+        DeviceSubscription::factory()->create([
+            'device_id' => 'dev-abc',
+            'full_name' => 'Sara Ahmad',
+            'phone' => '0999123',
+        ]);
+        DeviceSubscription::factory()->create(['device_id' => 'other', 'full_name' => 'Ali', 'phone' => '0777']);
+
+        $this->actAsStaff();
+
+        foreach (['0999123', 'Sara', 'dev-abc'] as $term) {
+            $this->getJson('/api/v1/device-subscriptions?q='.$term)
+                ->assertOk()
+                ->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.device_id', 'dev-abc');
+        }
+    }
+
+    /** Activating a device fulfils and closes its request, draining the queue. */
+    public function test_activation_closes_the_pending_request(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'status' => 'pending',
+            'requested_plan' => '12_months',
+            'contact_method' => 'whatsapp',
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', ['device_id' => 'dev-1', 'plan_id' => 'yearly'])->assertOk();
+
+        $this->getJson('/api/v1/device-subscriptions?status=pending')->assertOk()->assertJsonCount(0, 'data');
+
+        $device = DeviceSubscription::query()->where('device_id', 'dev-1')->sole();
+        $this->assertNull($device->status);
+        // Retained: the operator may have sold a plan other than the one requested.
+        $this->assertSame('12_months', $device->requested_plan);
+    }
+
+    /** The console reads the plan request and trial state off the staff resource. */
+    public function test_staff_resource_exposes_request_and_trial_fields(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => Carbon::now()->addDays(30),
+            'trial_expires_at' => Carbon::now()->addDays(30),
+            'status' => 'pending',
+            'requested_plan' => '12_months',
+            'contact_method' => 'whatsapp',
+        ]);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions')
+            ->assertOk()
+            ->assertJsonPath('data.0.is_trial', true)
+            ->assertJsonPath('data.0.is_active', true)
+            ->assertJsonPath('data.0.status', 'pending')
+            ->assertJsonPath('data.0.requested_plan', '12_months')
+            ->assertJsonPath('data.0.contact_method', 'whatsapp');
+    }
+
+    /** The console activates against the same catalog the apps see. */
+    public function test_staff_plan_catalog_is_enveloped_and_requires_auth(): void
+    {
+        $this->getJson('/api/v1/device-subscriptions/plans')->assertUnauthorized();
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions/plans')
+            ->assertOk()
+            ->assertJsonPath('data.currency.code', 'USD')
+            ->assertJsonPath('data.plans.0.id', 'half_year')
+            ->assertJsonPath('data.plans.1.id', 'yearly');
+    }
+
     public function test_sweep_expiry_command_runs(): void
     {
         DeviceSubscription::factory()->expired()->create();

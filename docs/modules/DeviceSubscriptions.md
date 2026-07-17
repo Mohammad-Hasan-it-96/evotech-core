@@ -54,9 +54,16 @@ with no auth token**, so the module exposes three route groups:
 ### Versioned twins
 
 `/api/v1/device/{register,check,profile,review,plans}` (`auth:product`, `throttle:product`) mirror
-the device endpoints for future app versions. `/api/v1/device-subscriptions` (index) and
-`/api/v1/device-subscriptions/{deviceSubscription}/activate` (`auth:sanctum`) are the enveloped
-staff API, keyed by the model's `uuid`.
+the device endpoints for future app versions.
+
+The enveloped staff API (`auth:sanctum`), keyed by the model's `uuid`, backs the operator console
+at `evotech-web` `/dashboard/devices`:
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/device-subscriptions` | Paginated. Filters: `status` (`pending` = the work queue), `app_name`, `q` (searches `device_id`, `full_name`, `phone`). |
+| GET | `/api/v1/device-subscriptions/plans` | The catalog to activate against — the same one the apps see, so an operator cannot pick a plan id the device would not recognise. |
+| POST | `/api/v1/device-subscriptions/{deviceSubscription}/activate` | Activate/extend. **Closes the pending request** (`status → null`); `requested_plan` is kept, since the operator may sell a different plan. |
 
 ## Plans
 

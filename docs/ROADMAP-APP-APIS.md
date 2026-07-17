@@ -191,17 +191,39 @@ Per the app's owner-locked design.
 **Exit met:** a fresh Fawateer install is usable for 30 days with no operator action,
 and cannot farm a second trial.
 
-### Phase C — Operator console 🚧
+### Phase C — Operator console ✅ (done, bar FCM credentials)
 
 The plan requests from Phase A are worthless unless an operator can act on them.
 
-- Dashboard screen (`evotech-web`): pending requests, device search, activate/extend.
-- Backed by the existing staff endpoints (`auth:sanctum`).
-- FCM live-unlock on activation (`type: new_plan_activated` / `subscription_activated`
-  / `license_updated`) — requires real FCM credentials (`FirebasePushNotifier` is a
-  scaffold today).
+**API** (`auth:sanctum`):
+- `GET /api/v1/device-subscriptions` gained the filters a console needs —
+  `status=pending` (the work queue), `app_name` (several apps share this
+  deployment), and `q` (searches `device_id`, `full_name`, `phone` — what an
+  operator has to hand when a customer messages them).
+- `GET /api/v1/device-subscriptions/plans` — the catalog to activate against.
+  Staff-scoped rather than reusing the shim's public `getPlans`, which Phase E
+  retires. Serving the *same* config catalog means the operator cannot pick a
+  plan id the device would not recognise (an unknown id yields a **0-month term** —
+  an instantly-expired subscription for someone who just paid).
+- The staff resource now exposes `is_trial`, `trial_expires_at`, `status`,
+  `requested_plan`, `contact_method`.
+- **Activation closes the request it fulfils** (`status → null`), so the queue
+  drains. `requested_plan` is retained — the operator may sell a different plan.
 
-**Exit:** a sale can be fulfilled without touching the database by hand.
+**Dashboard** (`evotech-web`, `/dashboard/devices`, bilingual ar/en):
+- "Pending requests" is the **default tab** — it is the work queue. Rows show the
+  contact channel the app funnelled the user to, and one badge for the four states
+  an operator must tell apart: awaiting activation / trial / active / expired.
+- Activate dialog preselects the plan the user asked for, so the common case is
+  one click.
+
+**121 → 163 suite tests; 30 module tests. Pint + Larastan max clean; frontend
+lint, typecheck and build clean (route generated for both locales).**
+
+**Exit met** for the software: a sale can be fulfilled without touching the
+database. ⚠️ **But live-unlock still no-ops** — `FirebasePushNotifier` is a
+scaffold pending real FCM credentials, so an activated customer stays locked until
+they next reopen the app (which polls `check_device`). See Risks.
 
 ### Phase D — Per-app plans, without an app release 📋
 
