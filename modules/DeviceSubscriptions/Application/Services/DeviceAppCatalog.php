@@ -30,6 +30,50 @@ final class DeviceAppCatalog
     }
 
     /**
+     * An app's own plan catalog, or null when it has none configured — in which
+     * case the caller falls back to the shared list. Null and "empty list" are
+     * deliberately different: an app must be able to configure zero plans.
+     *
+     * @return array<int, mixed>|null
+     */
+    public function plans(string $appName): ?array
+    {
+        $plans = $this->settings($appName)['plans'] ?? null;
+
+        return is_array($plans) ? array_values($plans) : null;
+    }
+
+    /**
+     * The app_name behind a URL slug (`/api/{slug}/*`), or null if unknown.
+     *
+     * Unknown slugs resolve to null rather than erroring: the caller then serves
+     * the shared catalog, so a typo'd base URL degrades to today's behaviour
+     * instead of locking an app out of its plans.
+     */
+    public function appForSlug(string $slug): ?string
+    {
+        $apps = config('device-subscriptions.apps', []);
+
+        if (! is_array($apps)) {
+            return null;
+        }
+
+        foreach ($apps as $name => $settings) {
+            if (! is_string($name) || ! is_array($settings)) {
+                continue;
+            }
+
+            $appSlug = $settings['slug'] ?? null;
+
+            if (is_string($appSlug) && strcasecmp($appSlug, $slug) === 0) {
+                return $name;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return array<array-key, mixed>
      */
     private function settings(string $appName): array

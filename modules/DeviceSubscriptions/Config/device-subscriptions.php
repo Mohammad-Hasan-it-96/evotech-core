@@ -55,15 +55,29 @@ return [
      *
      * `label` — the product name used in push copy, so a Fawateer user is not asked
      * to renew "المندوب الذكي".
+     *
+     * `slug` — the app's URL namespace, `/api/{slug}/*` (Phase D of
+     * docs/ROADMAP-APP-APIS.md). `getPlans` carries no app_name, so a shared base URL
+     * cannot serve different plans per app. Each app reads its own remote-config
+     * file, so pointing its baseUrl at `…/api/{slug}` namespaces every call it makes
+     * and needs **no store release**. The un-namespaced `/api/*` stays live for the
+     * builds still pointed at it and serves the shared catalog below.
+     *
+     * `plans` — optional per-app catalog. **Omit it and the app gets the shared
+     * `plans` list below** — which is what both apps do today, so nothing changes
+     * until a price is deliberately set here.
      */
     'apps' => [
         'Fawateer' => [
             'label' => 'فواتير',
             'trial_days' => 30,
+            'slug' => 'fawateer',
+            // 'plans' => [...],  // ← per-app catalog; omitted = the shared list below.
         ],
         'SmartAgent' => [
             'label' => 'المندوب الذكي',
             'trial_days' => 0,
+            'slug' => 'smartagent',
         ],
     ],
 

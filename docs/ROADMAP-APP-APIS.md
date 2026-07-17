@@ -128,7 +128,7 @@ Verified against both codebases. **Severity** is the effect on a real user.
 | 5 | `server_time` missing from `create_device` | High | The app takes its trusted clock baseline from **both** responses. Absent ⇒ the 5-min tamper guard and 72h grace degrade |
 | 6 | Plans are SmartAgent's, and global | High | We serve `half_year $12` / `yearly $20`. Fawateer's catalog is **$19 / $49**. `getPlans` carries **no** `app_name`, so one backend cannot vary plans per app → see Phase D |
 | 7 | `price_after_discount` absent | Low | Expected by the plan parser; nullable, so likely tolerated. Confirm before shipping |
-| 8 | `fallback_device_id` collisions | Low | All devices with an unreadable id share one literal id. Needs an explicit server-side policy |
+| 8 | `fallback_device_id` collisions | ~~Low~~ → **Closed (quarantined)** | All devices with an unreadable id share one literal id — and it is **not** salted per app, so it collides across products too. Phase B made this bite: the first arrival would consume the shared trial and every later one would inherit its state (a lapsed expiry ⇒ locked out on day one; a *paid* plan ⇒ free subscriptions for the whole bucket), while `activate()`'s unscoped id lookup could license another product's row. **Policy: quarantine.** Never trialled, never activated, and `activate()` is now app-scoped and takes the resolved model. Safe because the fallback is transient — the client re-registers under its real id on a later launch |
 | 9 | `success` flag in `getPlans` | Low | SmartAgent **requires** it; Fawateer ignores it. **Keep sending it** |
 
 > Gaps 1–4 each independently prevent go-live. None is large; they are small because
@@ -178,6 +178,14 @@ Per the app's owner-locked design.
 - Conversion needs no new endpoint and no flag to clear: operator activation sets
   `plan_id`, which ends the trial by definition. `trial_expires_at` is retained as
   the record that a trial was spent.
+- **Deviation from this phase's original spec:** it called for `status = 'trial'`.
+  Dropped deliberately — `status` carries the app's *plan request* (`'pending'`),
+  so a purchase intent would clobber the trial marker and the two would fight over
+  one column. `is_trial` is derived instead (`isOnTrial()`: has a trial expiry, no
+  paid plan, still active), which cannot drift out of sync with the thing it
+  describes.
+- **Deviation:** the shared `fallback_device_id` is **not** trialled — see the
+  quarantine note under gap 8.
 - **Also fixed:** `create_device` answered with the **raw** `is_verified` while
   `check_device` forced it to `0` past expiry. Harmless while every device was
   operator-activated; with trials it meant a lapsed-trial device re-registering was
@@ -225,17 +233,41 @@ database. ⚠️ **But live-unlock still no-ops** — `FirebasePushNotifier` is 
 scaffold pending real FCM credentials, so an activated customer stays locked until
 they next reopen the app (which polls `check_device`). See Risks.
 
-### Phase D — Per-app plans, without an app release 📋
+### Phase D — Per-app plans, without an app release ✅ (mechanism done)
 
-Fawateer and SmartAgent need different prices, but `getPlans` carries no `app_name`.
+Fawateer and SmartAgent need different prices, but `getPlans` carries no `app_name`
+— it is the one device endpoint that cannot say which app is asking.
 
 **Lever:** the two apps read **separate** remote-config files, so they can be given
-**different base URLs** — e.g. `…/apps/fawateer/api/*` vs `…/apps/smart-agent/api/*`.
-The app is namespaced by URL; the plan catalog resolves per namespace. **Zero app
-changes.** (Alternative — an optional `?app_name=` — needs a store release, so it
-is a non-starter for the shipped builds.)
+**different base URLs**. The whole shim is now served under `/api/{slug}/*` as well
+as the shared `/api/*`, from **one route definition** so the surfaces cannot drift.
+Pointing an app's `baseUrl` at `…/api/fawateer` namespaces every call it makes —
+**no store release**, and reverting is the same one-value edit. (The alternative, an
+optional `?app_name=`, needs a new app build, so it is a non-starter for shipped
+builds.)
 
-**Exit:** each app gets its own catalog and pricing from one backend.
+- `config('device-subscriptions.apps.<App>.slug')` — the URL namespace.
+- `config('device-subscriptions.apps.<App>.plans')` — **optional**. Omitted ⇒ the
+  shared list, which is what both apps get today, so **nothing changes until a price
+  is deliberately set**.
+- Unknown slug ⇒ the shared catalog, never an error: a typo'd base URL degrades to
+  today's behaviour instead of locking an app out of its plans.
+- `{app}` excludes any version segment (`v1`, future `v2…`) so the namespace can
+  never swallow the platform API. (The pattern is embedded mid-regex by the route
+  compiler, so the exclusion is a prefix rule — an anchored `$` would match the end
+  of the whole URI, not the segment, and silently fail open.)
+- **Activation resolves the term in the device's own catalog.** The same plan id can
+  mean 6 months in one app and 12 in another; the wrong catalog sets the wrong expiry
+  on a paying customer. The console likewise asks for the catalog of the app it is
+  activating.
+
+**45 module tests (178 suite-wide); Pint + Larastan max clean; frontend lint,
+typecheck, build clean.**
+
+**Exit met** for the mechanism: each app can get its own catalog and pricing from one
+backend, switched by a config edit. ⚠️ **No prices have been changed** — that is
+[open decision #2](#6-open-decisions), and it is the owner's call, not an
+engineering one.
 
 ### Phase E — Profile B for new apps 📋
 
@@ -268,8 +300,8 @@ they have separate config files, so a failure is contained to one app.
 | # | Decision | Recommendation |
 |---|---|---|
 | 1 | ADR for Phase A/B/D? | **Yes — ADR 0011.** ADR 0010 covers a SmartAgent-shaped shim; trial, plan requests and per-app namespacing extend it materially |
-| 2 | Fawateer plan prices/ids | Catalog says $19 / $49; the shim currently serves $12 / $20. **Owner must confirm** |
-| 3 | `fallback_device_id` policy | Reject it, or accept and quarantine. Needs a call |
+| 2 | Fawateer plan prices/ids | **Still open — Phase D built the mechanism, not the decision.** The website advertises **$19 / $49**; the shim serves SmartAgent's **$12 / $20**. Note the two are not the same *shape*: the site's tiers are monthly and feature-based (100 invoices/mo vs unlimited), while the device catalog is duration-based (6/12 months, no feature tiers) — and the app supports a `1_month` plan the shim has never offered. So this is a product decision (which plans, which durations, which prices), then a config edit to `apps.Fawateer.plans`. **Owner must confirm** |
+| 3 | ~~`fallback_device_id` policy~~ | **Decided (2026-07-17): accept and quarantine.** Register it (rejecting would brick a device over a transient read failure), but never trial it and never activate it. See gap 8 |
 | 4 | Trial length | 30 days per the locked design |
 | 5 | Own the `harrypotter.foodsalebot.com` backend? | Both apps point at it today. Confirm it is ours and that legacy data is exportable |
 

@@ -69,8 +69,18 @@ at `evotech-web` `/dashboard/devices`:
 
 Static in `config/device-subscriptions.php` (`half_year` — 6 months, $12; `yearly` — 12 months,
 $20, recommended), preserving the exact `getPlans` payload. Prices change via config, no deploy.
-`getPlans` carries no `app_name`, so **both apps read one catalog** — per-app pricing is Phase D
-of [`ROADMAP-APP-APIS.md`](../ROADMAP-APP-APIS.md).
+
+**Per-app catalogs.** `getPlans` is the one device endpoint carrying no `app_name`, so on the
+shared `/api/*` surface it cannot tell the apps apart. The whole shim is therefore also served
+under **`/api/{slug}/*`** (`apps.<App>.slug`) from one route definition; pointing an app's
+remote-config `baseUrl` at `…/api/fawateer` namespaces every call it makes, with **no store
+release**. Set `apps.<App>.plans` to give that app its own catalog — omit it and it reads the
+shared list (what both apps do today). An unknown slug serves the shared catalog rather than
+erroring, so a typo'd base URL degrades to current behaviour. `{app}` excludes version segments
+(`v1`, `v2`…), so the namespace can never shadow the platform API.
+
+Activation resolves a plan's term in **the device's own** app catalog — the same id may mean a
+different number of months per app.
 
 ## Per-app settings & the free trial
 

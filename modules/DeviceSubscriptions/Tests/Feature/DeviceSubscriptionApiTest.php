@@ -2,6 +2,7 @@
 
 namespace Modules\DeviceSubscriptions\Tests\Feature;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
@@ -548,6 +549,267 @@ class DeviceSubscriptionApiTest extends TestCase
             ->assertJsonPath('data.currency.code', 'USD')
             ->assertJsonPath('data.plans.0.id', 'half_year')
             ->assertJsonPath('data.plans.1.id', 'yearly');
+    }
+
+    // --- The shared fallback id is a bucket, not a device --------------------
+
+    /**
+     * `fallback_device_id` is what every client sends when it cannot read its real
+     * id — one literal, shared by every such device and every app. Trialling it
+     * would let the first arrival consume a trial the rest inherit: they would land
+     * on day one already holding a stranger's expiry.
+     */
+    public function test_fallback_device_id_is_never_granted_a_trial(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'fallback_device_id',
+            'full_name' => 'Unknown Device',
+            'phone' => '0999',
+        ])->assertOk()->assertJson(['is_verified' => 0, 'is_trial' => 0, 'expires_at' => null]);
+
+        $device = DeviceSubscription::query()->where('device_id', 'fallback_device_id')->sole();
+        $this->assertNull($device->trial_expires_at);
+    }
+
+    /** A real device beside it still gets its trial — quarantine is not a blanket. */
+    public function test_a_real_device_is_still_trialled_alongside_the_fallback(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer', 'device_id' => 'fallback_device_id',
+            'full_name' => 'A', 'phone' => '01',
+        ])->assertOk();
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer', 'device_id' => 'real-hashed-id',
+            'full_name' => 'B', 'phone' => '02',
+        ])->assertOk()->assertJson(['is_verified' => 1, 'is_trial' => 1]);
+    }
+
+    /** Activating the bucket would license every device that landed in it. */
+    public function test_fallback_device_id_cannot_be_activated_via_the_legacy_shim(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'fallback_device_id',
+            'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', [
+            'device_id' => 'fallback_device_id',
+            'plan_id' => 'yearly',
+        ])->assertNotFound();
+
+        $device = DeviceSubscription::query()->where('device_id', 'fallback_device_id')->sole();
+        $this->assertFalse($device->is_verified);
+        $this->assertNull($device->plan_id);
+    }
+
+    /** Same rule on the console's own endpoint, which binds the row directly. */
+    public function test_fallback_device_id_cannot_be_activated_via_the_console(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'fallback_device_id',
+            'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$device->uuid}/activate", ['plan_id' => 'yearly'])
+            ->assertStatus(422);
+
+        $this->assertFalse($device->refresh()->is_verified);
+    }
+
+    // --- Activation acts on the row the operator chose -----------------------
+
+    /**
+     * The console binds a row, so that row must be the one activated. It used to
+     * pass the row's device_id to a service that re-queried by id alone — where an
+     * id is not unique that activates a stranger and reports failure for the row
+     * the operator picked.
+     */
+    public function test_console_activates_the_bound_row_not_another_app_sharing_the_id(): void
+    {
+        $fawateer = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+        $smartAgent = DeviceSubscription::factory()->create([
+            'app_name' => 'SmartAgent', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$smartAgent->uuid}/activate", ['plan_id' => 'yearly'])
+            ->assertOk()
+            ->assertJsonPath('data.app_name', 'SmartAgent')
+            ->assertJsonPath('data.is_verified', true);
+
+        $this->assertTrue($smartAgent->refresh()->is_verified);
+        // The other product's device must be untouched.
+        $this->assertFalse($fawateer->refresh()->is_verified);
+    }
+
+    /** The legacy shim can be scoped to one product when the caller knows it. */
+    public function test_legacy_activation_can_be_scoped_by_app_name(): void
+    {
+        $fawateer = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+        $smartAgent = DeviceSubscription::factory()->create([
+            'app_name' => 'SmartAgent', 'device_id' => 'shared-id', 'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', [
+            'device_id' => 'shared-id',
+            'app_name' => 'SmartAgent',
+            'plan_id' => 'yearly',
+        ])->assertOk();
+
+        $this->assertTrue($smartAgent->refresh()->is_verified);
+        $this->assertFalse($fawateer->refresh()->is_verified);
+    }
+
+    // --- The anti-farm anchor is enforced by the database --------------------
+
+    /**
+     * The trial is unfarmable only because a reinstall finds the existing row.
+     * That rests on one row per (app_name, device_id) — so the database, not a
+     * find-then-create race, decides it.
+     */
+    public function test_device_identity_is_unique_per_app(): void
+    {
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'dup']);
+
+        $this->expectException(QueryException::class);
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'dup']);
+    }
+
+    /** The same phone in two products is two subscriptions, not a clash. */
+    public function test_the_same_device_id_in_two_apps_is_allowed(): void
+    {
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'same']);
+        DeviceSubscription::factory()->create(['app_name' => 'SmartAgent', 'device_id' => 'same']);
+
+        $this->assertSame(2, DeviceSubscription::query()->where('device_id', 'same')->count());
+    }
+
+    /**
+     * Phase D. getPlans carries no app_name, so a shared base URL cannot serve
+     * different plans per app. The slug supplies it instead — and because each app
+     * reads its own remote-config base URL, moving onto it needs no store release.
+     */
+    public function test_namespaced_get_plans_serves_the_apps_own_catalog(): void
+    {
+        config()->set('device-subscriptions.apps.Fawateer.plans', [
+            ['id' => 'monthly', 'title' => 'شهري', 'duration_months' => 1, 'price' => 19,
+                'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
+        ]);
+
+        $this->getJson('/api/fawateer/getPlans')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonCount(1, 'plans')
+            ->assertJsonPath('plans.0.id', 'monthly')
+            ->assertJsonPath('plans.0.price', 19);
+
+        // The un-namespaced surface is unchanged for builds still pointed at it.
+        $this->getJson('/api/getPlans')
+            ->assertOk()
+            ->assertJsonPath('plans.0.id', 'half_year');
+    }
+
+    /** An app with no catalog of its own falls back to the shared list. */
+    public function test_namespaced_app_without_own_plans_falls_back_to_shared(): void
+    {
+        $this->getJson('/api/smartagent/getPlans')
+            ->assertOk()
+            ->assertJsonPath('plans.0.id', 'half_year')
+            ->assertJsonPath('plans.1.id', 'yearly');
+    }
+
+    /** A typo'd base URL degrades to the shared catalog, never an error. */
+    public function test_unknown_slug_serves_the_shared_catalog(): void
+    {
+        $this->getJson('/api/not-an-app/getPlans')
+            ->assertOk()
+            ->assertJsonPath('plans.0.id', 'half_year');
+    }
+
+    /** The whole shim is reachable under the namespace — the app moves wholesale. */
+    public function test_namespaced_surface_serves_the_whole_shim(): void
+    {
+        $this->postJson('/api/fawateer/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'ns-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+        ])->assertOk()->assertJsonPath('is_trial', 1);
+
+        $this->postJson('/api/fawateer/check_device', ['app_name' => 'Fawateer', 'device_id' => 'ns-1'])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1);
+
+        $this->postJson('/api/fawateer/update_my_data', [
+            'app_name' => 'Fawateer', 'device_id' => 'ns-1', 'fcm_token' => 'tok',
+        ])->assertOk();
+    }
+
+    /** The {app} segment must never swallow the versioned platform API. */
+    public function test_namespace_does_not_shadow_the_v1_api(): void
+    {
+        $this->getJson('/api/v1/health')->assertOk();
+
+        // v1 is excluded from the slug pattern, so this is a miss, not a plan list.
+        $this->getJson('/api/v1/getPlans')->assertNotFound();
+    }
+
+    /**
+     * The term must be read from the device's own catalog: the same id can mean a
+     * different number of months per app, and the wrong one sets the wrong expiry.
+     */
+    public function test_activation_uses_the_devices_own_app_catalog(): void
+    {
+        config()->set('device-subscriptions.apps.Fawateer.plans', [
+            ['id' => 'yearly', 'title' => 'سنوي', 'duration_months' => 1, 'price' => 19,
+                'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
+        ]);
+
+        // Same plan id in both apps; Fawateer's is 1 month, the shared one 12.
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'f-1']);
+        DeviceSubscription::factory()->create(['app_name' => 'SmartAgent', 'device_id' => 's-1']);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', ['device_id' => 'f-1', 'app_name' => 'Fawateer', 'plan_id' => 'yearly'])->assertOk();
+        $this->postJson('/api/activateDevice', ['device_id' => 's-1', 'app_name' => 'SmartAgent', 'plan_id' => 'yearly'])->assertOk();
+
+        $fawateer = DeviceSubscription::query()->where('device_id', 'f-1')->sole()->expires_at;
+        $smartAgent = DeviceSubscription::query()->where('device_id', 's-1')->sole()->expires_at;
+        $this->assertNotNull($fawateer);
+        $this->assertNotNull($smartAgent);
+
+        $this->assertEqualsWithDelta(30, Carbon::now()->diffInDays($fawateer), 2);
+        $this->assertEqualsWithDelta(365, Carbon::now()->diffInDays($smartAgent), 2);
+    }
+
+    /** The console asks for the catalog of the app it is activating. */
+    public function test_staff_plan_catalog_can_be_scoped_to_an_app(): void
+    {
+        config()->set('device-subscriptions.apps.Fawateer.plans', [
+            ['id' => 'monthly', 'title' => 'شهري', 'duration_months' => 1, 'price' => 19,
+                'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
+        ]);
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions/plans?app_name=Fawateer')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.plans')
+            ->assertJsonPath('data.plans.0.id', 'monthly');
+
+        $this->getJson('/api/v1/device-subscriptions/plans?app_name=SmartAgent')
+            ->assertOk()
+            ->assertJsonPath('data.plans.0.id', 'half_year');
     }
 
     public function test_sweep_expiry_command_runs(): void

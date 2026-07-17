@@ -25,12 +25,20 @@ final class DeviceAdminController extends ApiController
 
     // --- Legacy shim (auth:sanctum), legacy response shapes -------------------
 
-    /** POST activateDevice — activate/extend by device_id. */
+    /**
+     * POST activateDevice — activate/extend by device_id.
+     *
+     * `app_name` is optional and new: the legacy contract never had it, but this
+     * deployment serves several products, so pass it whenever it is known and the
+     * lookup is scoped to the right one. The shared fallback id is rejected as
+     * not-found — see [DeviceSubscription::FALLBACK_DEVICE_ID].
+     */
     public function activate(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'device_id' => 'required|string',
             'plan_id' => 'required|string',
+            'app_name' => 'sometimes|string',
         ]);
 
         if ($validator->fails()) {
@@ -41,14 +49,16 @@ final class DeviceAdminController extends ApiController
             ], 422);
         }
 
-        $device = $this->devices->activate(
+        $device = $this->devices->findForActivation(
             (string) $request->string('device_id'),
-            (string) $request->string('plan_id'),
+            $request->filled('app_name') ? (string) $request->string('app_name') : null,
         );
 
         if ($device === null) {
             return response()->json(['message' => 'Device not found'], 404);
         }
+
+        $device = $this->devices->activate($device, (string) $request->string('plan_id'));
 
         return response()->json([
             'success' => true,
@@ -115,10 +125,17 @@ final class DeviceAdminController extends ApiController
      * The same config catalog the apps see, so the operator can only pick a plan
      * id the device will actually recognise. Staff-scoped rather than reusing the
      * legacy shim's public getPlans, which Phase E retires.
+     *
+     * `app_name` selects the app's own catalog (Phase D). The console must pass the
+     * device's app: with per-app plans, showing the shared list would offer plan ids
+     * the device's catalog may not define — and an unrecognised id activates a
+     * 0-month term, expiring instantly for someone who has just paid.
      */
-    public function plansV1(DevicePlanCatalog $plans): JsonResponse
+    public function plansV1(Request $request, DevicePlanCatalog $plans): JsonResponse
     {
-        $payload = $plans->payload();
+        $payload = $plans->payload(
+            $request->filled('app_name') ? (string) $request->string('app_name') : null,
+        );
 
         return response()->json([
             'data' => [
@@ -128,16 +145,29 @@ final class DeviceAdminController extends ApiController
         ]);
     }
 
-    /** POST /api/v1/device-subscriptions/{deviceSubscription}/activate. */
-    public function activateV1(Request $request, DeviceSubscription $deviceSubscription): DeviceSubscriptionResource
+    /**
+     * POST /api/v1/device-subscriptions/{deviceSubscription}/activate.
+     *
+     * Activates the bound row itself. It used to pass that row's `device_id` back
+     * to a service that re-queried by id alone — so where an id was not unique
+     * (the shared fallback bucket) the operator could activate one device and
+     * license another, then be shown the untouched row and told it failed.
+     *
+     * The fallback bucket is refused: it is not a device, and activating it would
+     * license every device that landed in it.
+     */
+    public function activateV1(Request $request, DeviceSubscription $deviceSubscription): DeviceSubscriptionResource|JsonResponse
     {
         $request->validate(['plan_id' => 'required|string']);
 
-        $this->devices->activate(
-            (string) $deviceSubscription->device_id,
-            (string) $request->string('plan_id'),
-        );
+        if ($deviceSubscription->isFallback()) {
+            return response()->json([
+                'message' => 'This row is the shared unreadable-id bucket, not a single device, and cannot be activated. Ask the customer to reopen the app so it registers under its real device id.',
+            ], 422);
+        }
 
-        return DeviceSubscriptionResource::make($deviceSubscription->refresh());
+        $device = $this->devices->activate($deviceSubscription, (string) $request->string('plan_id'));
+
+        return DeviceSubscriptionResource::make($device);
     }
 }

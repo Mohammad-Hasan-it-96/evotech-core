@@ -74,7 +74,7 @@ final class DeviceSubscriptionService
             'phone' => $phone,
             'is_verified' => false,
             'fcm_token' => $fcmToken,
-            ...$this->grantTrial($appName),
+            ...$this->grantTrial($appName, $deviceId),
             ...$planRequest,
         ]);
     }
@@ -92,10 +92,21 @@ final class DeviceSubscriptionService
      * and never reads `trial_expires_at`; the latter is our own record that a
      * trial was given, and it survives conversion to a paid plan.
      *
+     * The shared fallback id gets nothing: it is one bucket for every device that
+     * could not read its own id, so a trial stamped on it would be inherited by
+     * every later arrival — the first one consumes it, and everyone after is
+     * locked out on day one holding someone else's expiry. Declining costs those
+     * devices nothing, because the fallback is transient: they re-register under
+     * their real id on a later launch and are trialled properly then.
+     *
      * @return array<string, mixed>
      */
-    private function grantTrial(string $appName): array
+    private function grantTrial(string $appName, string $deviceId): array
     {
+        if (DeviceSubscription::isFallbackId($deviceId)) {
+            return [];
+        }
+
         $days = $this->apps->trialDays($appName);
 
         if ($days <= 0) {
@@ -153,19 +164,45 @@ final class DeviceSubscriptionService
     }
 
     /**
-     * Activate (or extend) a subscription. Looks up by device_id ONLY, matching
-     * the legacy contract — the first matching row wins. Returns null if no device
-     * exists. Unknown plan_id yields a 0-month term (immediate expiry), as before.
+     * Resolve the device an operator means to activate, by the id they were given.
+     *
+     * Scoped by app_name when known: several products share this deployment, and
+     * while their salted ids never collide, the shared fallback id does — so an
+     * unscoped lookup could hand back another product's row. The fallback id is
+     * refused outright ([DeviceSubscription::FALLBACK_DEVICE_ID]): it is a bucket,
+     * not a device, and activating it would license every device in it.
      */
-    public function activate(string $deviceId, string $planId): ?DeviceSubscription
+    public function findForActivation(string $deviceId, ?string $appName = null): ?DeviceSubscription
     {
-        $device = DeviceSubscription::query()->where('device_id', $deviceId)->first();
-
-        if ($device === null) {
+        if (DeviceSubscription::isFallbackId($deviceId)) {
             return null;
         }
 
-        $expiresAt = Carbon::now()->addMonths($this->plans->durationMonths($planId));
+        return DeviceSubscription::query()
+            ->where('device_id', $deviceId)
+            ->when($appName !== null, fn ($q) => $q->where('app_name', $appName))
+            ->first();
+    }
+
+    /**
+     * Activate (or extend) a subscription on a device the caller has resolved.
+     *
+     * Takes the model rather than an id: the id is not reliably unique (the shared
+     * fallback bucket, and any duplicate a pre-unique-index race left behind), so
+     * re-querying by it risks activating a row other than the one the operator
+     * chose — silently licensing a stranger while the console reports failure.
+     * Unknown plan_id yields a 0-month term (immediate expiry), as before.
+     *
+     * The term is read from **this device's own** app catalog (Phase D): apps may
+     * price and size plans differently, so the same id can mean six months in one
+     * and twelve in another. Resolving against the wrong catalog would hand a
+     * paying customer the wrong expiry.
+     */
+    public function activate(DeviceSubscription $device, string $planId): DeviceSubscription
+    {
+        $expiresAt = Carbon::now()->addMonths(
+            $this->plans->durationMonths($planId, $device->app_name),
+        );
 
         $device->update([
             'is_verified' => true,

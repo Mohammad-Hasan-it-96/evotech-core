@@ -34,6 +34,23 @@ use Modules\DeviceSubscriptions\Database\Factories\DeviceSubscriptionFactory;
  */
 class DeviceSubscription extends Model
 {
+    /**
+     * The literal id every client sends when it cannot read its real one.
+     *
+     * The apps hash their platform id with a per-app salt, so real ids never
+     * collide — but the unreadable-id fallback is a hardcoded constant, identical
+     * across every device AND every app. It is therefore not an identity at all:
+     * it is a shared bucket, and treating it as one device would let unrelated
+     * shops inherit each other's subscription. Quarantined at both gates — it is
+     * never granted a trial and never activated.
+     *
+     * Benign in practice because it is transient: a device that fails to read its
+     * ANDROID_ID (the client also falls back on a 3s platform-channel timeout)
+     * resolves it on a later launch and registers properly under its real id,
+     * leaving this row as inert junk.
+     */
+    public const FALLBACK_DEVICE_ID = 'fallback_device_id';
+
     /** @use HasFactory<DeviceSubscriptionFactory> */
     use HasFactory;
 
@@ -98,6 +115,21 @@ class DeviceSubscription extends Model
         return $this->trial_expires_at !== null
             && $this->plan_id === null
             && $this->isActive();
+    }
+
+    /**
+     * True when the id is the shared unreadable-id bucket, not a real device.
+     * See [self::FALLBACK_DEVICE_ID].
+     */
+    public static function isFallbackId(?string $deviceId): bool
+    {
+        return $deviceId === self::FALLBACK_DEVICE_ID;
+    }
+
+    /** True when this row is the shared bucket rather than one device. */
+    public function isFallback(): bool
+    {
+        return self::isFallbackId($this->device_id);
     }
 
     /**

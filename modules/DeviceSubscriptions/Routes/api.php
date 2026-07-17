@@ -23,7 +23,19 @@ use Modules\DeviceSubscriptions\Http\Controllers\PlanController;
  */
 
 // 1. Legacy shim ------------------------------------------------------------------
-Route::prefix('api')->group(function (): void {
+
+/*
+ * The shim's endpoints, registered under two prefixes from one definition so the
+ * surfaces cannot drift apart:
+ *
+ *  - /api/*        — the shared surface every shipped build points at today.
+ *  - /api/{app}/*  — the same contract namespaced per app (Phase D). getPlans is
+ *                    the only device endpoint with no app_name in the body, so the
+ *                    slug is what lets one backend serve different plans per app.
+ *                    An app moves onto it by editing its remote-config base URL:
+ *                    no store release, and reverting is the same one-value edit.
+ */
+$legacyEndpoints = function (): void {
     // Public device self-service (shipped app, no auth).
     Route::post('create_device', [DeviceController::class, 'createDevice']);
     Route::post('check_device', [DeviceController::class, 'checkDevice']);
@@ -38,7 +50,23 @@ Route::prefix('api')->group(function (): void {
         Route::post('activateDevice', [DeviceAdminController::class, 'activate']);
         Route::get('getDevice', [DeviceAdminController::class, 'index']);
     });
-});
+};
+
+Route::prefix('api')->group($legacyEndpoints);
+
+/*
+ * `app` excludes any version segment (v1, and any future v2…). Nothing under
+ * /api/v1 ends in one of the literal segments above, so no route is shadowed today
+ * — but this group is registered before most modules' /api/v1 routes, and the guard
+ * keeps a future `/api/v1/<one of those names>` from silently resolving here.
+ *
+ * Note the pattern is embedded mid-regex by the route compiler, so `$` would anchor
+ * to the end of the whole URI rather than this segment: the exclusion has to be a
+ * prefix rule, not an anchored one.
+ */
+Route::prefix('api/{app}')
+    ->where(['app' => '(?!v\d)[a-z][a-z0-9_-]*'])
+    ->group($legacyEndpoints);
 
 // 2. Versioned device API (auth:product) ------------------------------------------
 Route::prefix('api/v1/device')

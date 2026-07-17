@@ -12,9 +12,55 @@
     "paths": {
         "/app-download": {
             "get": {
-                "operationId": "appDownload.index",
+                "operationId": "modules.deviceSubscriptions.appDownload.index_0",
                 "tags": [
                     "AppDownload"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "latest_version": {
+                                            "type": "string"
+                                        },
+                                        "downloads": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "latest_version",
+                                        "downloads"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{app}/app-download": {
+            "get": {
+                "operationId": "modules.deviceSubscriptions.appDownload.index_0",
+                "tags": [
+                    "AppDownload"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -1630,6 +1676,570 @@
                 }
             }
         },
+        "/{app}/create_device": {
+            "post": {
+                "operationId": "modules.deviceSubscriptions.device.createDevice_0",
+                "summary": "POST create_device \u2014 register a device, refresh its token, or file a plan\nrequest. The app reuses this one endpoint for all three",
+                "tags": [
+                    "Device"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "app_name": {
+                                        "type": "string"
+                                    },
+                                    "device_id": {
+                                        "type": "string"
+                                    },
+                                    "full_name": {
+                                        "type": "string"
+                                    },
+                                    "phone": {
+                                        "type": "string"
+                                    },
+                                    "fcm_token": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "requested_plan": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "description": "Purchase intent (Fawateer): kept permissive on purpose \u2014 a 422 here\nwould fail registration outright in the shipped app.",
+                                        "maxLength": 50
+                                    },
+                                    "contact_method": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 30
+                                    },
+                                    "status": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 20
+                                    }
+                                },
+                                "required": [
+                                    "app_name",
+                                    "device_id",
+                                    "full_name",
+                                    "phone"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "is_verified": {
+                                            "type": "integer",
+                                            "description": "isActive(), not the raw column: legacy only forced is_verified to 0\npast expiry on check_device, so create_device could answer\n\"verified\" alongside an expires_at in the past. Harmless while every\ndevice was operator-activated; with trials it means a device whose\ntrial has lapsed re-registers and is told it is verified. Both\nendpoints now answer with one definition."
+                                        },
+                                        "is_trial": {
+                                            "type": "integer"
+                                        },
+                                        "expires_at": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        },
+                                        "plan": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "fcm_token": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "server_time": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "is_verified",
+                                        "is_trial",
+                                        "expires_at",
+                                        "plan",
+                                        "fcm_token",
+                                        "server_time"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Validation error"
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{app}/check_device": {
+            "post": {
+                "operationId": "modules.deviceSubscriptions.device.checkDevice_0",
+                "summary": "POST check_device \u2014 current subscription status (is_verified forced 0 past expiry)",
+                "tags": [
+                    "Device"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "device_id": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "app_name": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    }
+                                },
+                                "required": [
+                                    "device_id",
+                                    "app_name"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "is_verified": {
+                                            "type": "integer"
+                                        },
+                                        "is_trial": {
+                                            "type": "integer"
+                                        },
+                                        "plan": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "expires_at": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        },
+                                        "server_time": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "is_verified",
+                                        "is_trial",
+                                        "plan",
+                                        "expires_at",
+                                        "server_time"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Device not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Validation error"
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{app}/update_my_data": {
+            "post": {
+                "operationId": "modules.deviceSubscriptions.device.updateMyData_0",
+                "description": "Every field beyond the device key is optional: the app rotates its push\ntoken by sending fcm_token alone, and edits the profile by sending\nfull_name/phone alone. Requiring all of them 422'd token rotation, which\nsilently cost the device its live-unlock push.",
+                "summary": "POST update_my_data \u2014 partial profile update",
+                "tags": [
+                    "Device"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "device_id": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "app_name": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "full_name": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "fcm_token": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "device_id",
+                                    "app_name"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "success"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Device not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Validation error"
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{app}/add_review": {
+            "post": {
+                "operationId": "modules.deviceSubscriptions.device.addReview_0",
+                "summary": "POST add_review \u2014 store a rating/comment on the device",
+                "tags": [
+                    "Device"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "device_id": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "app_name": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "stars": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 5
+                                    },
+                                    "comment": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 1000
+                                    }
+                                },
+                                "required": [
+                                    "device_id",
+                                    "app_name",
+                                    "stars"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "success"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Device not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Validation error"
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/device/register": {
             "post": {
                 "operationId": "v1.device.register",
@@ -2168,7 +2778,8 @@
         },
         "/activateDevice": {
             "post": {
-                "operationId": "deviceAdmin.activate",
+                "operationId": "modules.deviceSubscriptions.deviceAdmin.activate_0",
+                "description": "`app_name` is optional and new: the legacy contract never had it, but this\ndeployment serves several products, so pass it whenever it is known and the\nlookup is scoped to the right one. The shared fallback id is rejected as\nnot-found \u2014 see [DeviceSubscription::FALLBACK_DEVICE_ID].",
                 "summary": "POST activateDevice \u2014 activate/extend by device_id",
                 "tags": [
                     "DeviceAdmin"
@@ -2184,6 +2795,9 @@
                                         "type": "string"
                                     },
                                     "plan_id": {
+                                        "type": "string"
+                                    },
+                                    "app_name": {
                                         "type": "string"
                                     }
                                 },
@@ -2289,10 +2903,194 @@
         },
         "/getDevice": {
             "get": {
-                "operationId": "deviceAdmin.index",
+                "operationId": "modules.deviceSubscriptions.deviceAdmin.index_0",
                 "summary": "GET getDevice \u2014 list all devices (legacy shape)",
                 "tags": [
                     "DeviceAdmin"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/DeviceSubscription"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/{app}/activateDevice": {
+            "post": {
+                "operationId": "modules.deviceSubscriptions.deviceAdmin.activate_0",
+                "description": "`app_name` is optional and new: the legacy contract never had it, but this\ndeployment serves several products, so pass it whenever it is known and the\nlookup is scoped to the right one. The shared fallback id is rejected as\nnot-found \u2014 see [DeviceSubscription::FALLBACK_DEVICE_ID].",
+                "summary": "POST activateDevice \u2014 activate/extend by device_id",
+                "tags": [
+                    "DeviceAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "device_id": {
+                                        "type": "string"
+                                    },
+                                    "plan_id": {
+                                        "type": "string"
+                                    },
+                                    "app_name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "device_id",
+                                    "plan_id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "is_verified": {
+                                            "type": "integer",
+                                            "const": 1
+                                        },
+                                        "plan": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "expires_at": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "is_verified",
+                                        "plan",
+                                        "expires_at"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Device not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Validation error"
+                                        },
+                                        "errors": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/{app}/getDevice": {
+            "get": {
+                "operationId": "modules.deviceSubscriptions.deviceAdmin.index_0",
+                "summary": "GET getDevice \u2014 list all devices (legacy shape)",
+                "tags": [
+                    "DeviceAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -2493,7 +3291,7 @@
         "/v1/device-subscriptions/plans": {
             "get": {
                 "operationId": "v1.device-subscriptions.plans",
-                "description": "The same config catalog the apps see, so the operator can only pick a plan\nid the device will actually recognise. Staff-scoped rather than reusing the\nlegacy shim's public getPlans, which Phase E retires.",
+                "description": "The same config catalog the apps see, so the operator can only pick a plan\nid the device will actually recognise. Staff-scoped rather than reusing the\nlegacy shim's public getPlans, which Phase E retires.\n\n`app_name` selects the app's own catalog (Phase D). The console must pass the\ndevice's app: with per-app plans, showing the shared list would offer plan ids\nthe device's catalog may not define \u2014 and an unrecognised id activates a\n0-month term, expiring instantly for someone who has just paid.",
                 "summary": "GET /api/v1/device-subscriptions/plans \u2014 the catalog the operator activates\nagainst",
                 "tags": [
                     "DeviceAdmin"
@@ -2542,6 +3340,7 @@
         "/v1/device-subscriptions/{deviceSubscription}/activate": {
             "post": {
                 "operationId": "v1.device-subscriptions.activate",
+                "description": "Activates the bound row itself. It used to pass that row's `device_id` back\nto a service that re-queried by id alone \u2014 so where an id was not unique\n(the shared fallback bucket) the operator could activate one device and\nlicense another, then be shown the untouched row and told it failed.\n\nThe fallback bucket is refused: it is not a device, and activating it would\nlicense every device that landed in it.",
                 "summary": "POST /api/v1/device-subscriptions/{deviceSubscription}/activate",
                 "tags": [
                     "DeviceAdmin"
@@ -4126,6 +4925,57 @@
                 "operationId": "modules.deviceSubscriptions.plan.index_0",
                 "tags": [
                     "Plan"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "currency": {
+                                            "type": "string"
+                                        },
+                                        "plans": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "currency",
+                                        "plans"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{app}/getPlans": {
+            "get": {
+                "operationId": "modules.deviceSubscriptions.plan.index_0",
+                "tags": [
+                    "Plan"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "default": null
+                        }
+                    }
                 ],
                 "responses": {
                     "200": {
