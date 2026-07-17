@@ -58,7 +58,13 @@ final class DeviceController
         );
 
         return response()->json([
-            'is_verified' => (int) $device->is_verified,
+            // isActive(), not the raw column: legacy only forced is_verified to 0
+            // past expiry on check_device, so create_device could answer
+            // "verified" alongside an expires_at in the past. Harmless while every
+            // device was operator-activated; with trials it means a device whose
+            // trial has lapsed re-registers and is told it is verified. Both
+            // endpoints now answer with one definition.
+            'is_verified' => (int) $device->isActive(),
             'is_trial' => (int) $device->isOnTrial(),
             'expires_at' => $device->expires_at,
             'plan' => $device->plan_id,

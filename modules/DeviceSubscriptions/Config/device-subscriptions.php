@@ -44,6 +44,29 @@ return [
         ],
     ],
 
+    /*
+     * Per-app settings, keyed by the `app_name` the client sends (exactly as the
+     * shipped apps send it: 'Fawateer', 'SmartAgent'). Lookup is case-insensitive.
+     *
+     * `trial_days` — length of the server-granted free trial, stamped once on first
+     * registration. **An app absent from this map, or set to 0, gets NO trial.**
+     * SmartAgent deliberately has none: its owner never asked for one, and granting
+     * it here would silently change that product's monetization.
+     *
+     * `label` — the product name used in push copy, so a Fawateer user is not asked
+     * to renew "المندوب الذكي".
+     */
+    'apps' => [
+        'Fawateer' => [
+            'label' => 'فواتير',
+            'trial_days' => 30,
+        ],
+        'SmartAgent' => [
+            'label' => 'المندوب الذكي',
+            'trial_days' => 0,
+        ],
+    ],
+
     'currency' => [
         'code' => 'USD',
         'symbol' => '$',

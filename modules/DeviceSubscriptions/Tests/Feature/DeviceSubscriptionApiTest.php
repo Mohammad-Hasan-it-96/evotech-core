@@ -256,6 +256,126 @@ class DeviceSubscriptionApiTest extends TestCase
             ->assertJsonPath('server_time', Carbon::now()->toISOString());
     }
 
+    /**
+     * Phase B: a fresh Fawateer install is unlocked for 30 days with no operator
+     * action. The app gates on is_verified + expires_at, so the trial has to land
+     * in those fields, not in a bespoke one.
+     */
+    public function test_first_registration_grants_a_thirty_day_trial(): void
+    {
+        $this->freezeTime();
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'new-dev',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+        ])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1)
+            ->assertJsonPath('is_trial', 1)
+            ->assertJsonPath('plan', null)
+            // startOfSecond: the timestamp column has second precision.
+            ->assertJsonPath('expires_at', Carbon::now()->addDays(30)->startOfSecond()->toJSON());
+
+        $device = DeviceSubscription::query()->where('device_id', 'new-dev')->sole();
+        $this->assertNotNull($device->trial_expires_at);
+        $this->assertTrue($device->isOnTrial());
+    }
+
+    /**
+     * The anti-abuse anchor: ANDROID_ID survives uninstall and data-clear, so a
+     * reinstall re-registers the same device_id and must NOT mint a second trial.
+     */
+    public function test_reinstall_cannot_farm_a_second_trial(): void
+    {
+        $expired = Carbon::now()->subDay()->startOfSecond();
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => $expired,
+            'trial_expires_at' => $expired,
+        ]);
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+        ])
+            ->assertOk()
+            // Trial already spent: still expired, still locked.
+            ->assertJsonPath('is_verified', 0)
+            ->assertJsonPath('is_trial', 0);
+
+        $this->assertSame(1, DeviceSubscription::query()->count());
+
+        $expiresAt = DeviceSubscription::query()->where('device_id', 'dev-1')->sole()->expires_at;
+        $this->assertNotNull($expiresAt);
+        $this->assertTrue(
+            $expired->equalTo($expiresAt),
+            'The spent trial expiry must not be extended by re-registering.',
+        );
+    }
+
+    /** SmartAgent configures no trial — registering must not grant one. */
+    public function test_smart_agent_registration_grants_no_trial(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'SmartAgent',
+            'device_id' => 'sa-1',
+            'full_name' => 'Ali',
+            'phone' => '0111',
+        ])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 0)
+            ->assertJsonPath('is_trial', 0)
+            ->assertJsonPath('expires_at', null);
+
+        $this->assertNull(DeviceSubscription::query()->where('device_id', 'sa-1')->sole()->trial_expires_at);
+    }
+
+    /** An app with no config entry inherits nobody's trial. */
+    public function test_unknown_app_grants_no_trial(): void
+    {
+        $this->postJson('/api/create_device', [
+            'app_name' => 'SomeFutureApp',
+            'device_id' => 'x-1',
+            'full_name' => 'Nobody',
+            'phone' => '0000',
+        ])->assertOk()->assertJsonPath('is_trial', 0);
+    }
+
+    /** Operator activation converts a trial to paid — no new endpoint, no flag to clear. */
+    public function test_operator_activation_converts_a_trial_to_paid(): void
+    {
+        $trialEnd = Carbon::now()->addDays(30);
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => $trialEnd,
+            'trial_expires_at' => $trialEnd,
+            'status' => 'pending',
+            'requested_plan' => '12_months',
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson('/api/activateDevice', ['device_id' => 'dev-1', 'plan_id' => 'yearly'])->assertOk();
+
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => 'dev-1'])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1)
+            ->assertJsonPath('is_trial', 0)
+            ->assertJsonPath('plan', 'yearly');
+
+        // trial_expires_at is retained as the record that a trial was already used.
+        $this->assertNotNull(DeviceSubscription::query()->where('device_id', 'dev-1')->sole()->trial_expires_at);
+    }
+
     public function test_add_review_stores_rating(): void
     {
         DeviceSubscription::factory()->create(['app_name' => 'smart_agent', 'device_id' => 'dev-1']);

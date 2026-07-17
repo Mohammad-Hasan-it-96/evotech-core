@@ -1180,7 +1180,8 @@
                                     "type": "object",
                                     "properties": {
                                         "is_verified": {
-                                            "type": "integer"
+                                            "type": "integer",
+                                            "description": "isActive(), not the raw column: legacy only forced is_verified to 0\npast expiry on check_device, so create_device could answer\n\"verified\" alongside an expires_at in the past. Harmless while every\ndevice was operator-activated; with trials it means a device whose\ntrial has lapsed re-registers and is told it is verified. Both\nendpoints now answer with one definition."
                                         },
                                         "is_trial": {
                                             "type": "integer"
@@ -1703,7 +1704,8 @@
                                     "type": "object",
                                     "properties": {
                                         "is_verified": {
-                                            "type": "integer"
+                                            "type": "integer",
+                                            "description": "isActive(), not the raw column: legacy only forced is_verified to 0\npast expiry on check_device, so create_device could answer\n\"verified\" alongside an expires_at in the past. Harmless while every\ndevice was operator-activated; with trials it means a device whose\ntrial has lapsed re-registers and is told it is verified. Both\nendpoints now answer with one definition."
                                         },
                                         "is_trial": {
                                             "type": "integer"

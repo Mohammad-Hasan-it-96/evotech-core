@@ -62,6 +62,31 @@ staff API, keyed by the model's `uuid`.
 
 Static in `config/device-subscriptions.php` (`half_year` — 6 months, $12; `yearly` — 12 months,
 $20, recommended), preserving the exact `getPlans` payload. Prices change via config, no deploy.
+`getPlans` carries no `app_name`, so **both apps read one catalog** — per-app pricing is Phase D
+of [`ROADMAP-APP-APIS.md`](../ROADMAP-APP-APIS.md).
+
+## Per-app settings & the free trial
+
+One deployment serves several shipped apps, told apart only by the `app_name` they send.
+They do **not** share policy — `config('device-subscriptions.apps')` keys settings per app
+(case-insensitive):
+
+| App | `trial_days` | `label` |
+|---|---|---|
+| `Fawateer` | 30 | فواتير |
+| `SmartAgent` | 0 (none) | المندوب الذكي |
+
+An app absent from the map gets **no trial** and falls back to its raw `app_name` as the label.
+The trial is Fawateer's design; granting it platform-wide would silently change SmartAgent's
+monetization.
+
+**The trial is a server-stamped expiry, not a second system.** First registration sets
+`is_verified`, `expires_at` **and** `trial_expires_at` to `now + trial_days`; the app gates on
+`expires_at` exactly as it would a paid one. It is **granted only on row creation**, which is
+what makes it unfarmable — Android's `ANDROID_ID` survives uninstall/data-clear, so a reinstall
+finds the existing row and gets nothing (imported legacy rows are never retro-granted). Operator
+activation converts it by setting `plan_id`, which ends the trial by definition;
+`trial_expires_at` is kept as the record that a trial was spent.
 
 ## Domain, jobs & extension points
 

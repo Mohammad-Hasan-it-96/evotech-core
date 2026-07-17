@@ -17,6 +17,7 @@ final class DeviceSubscriptionService
 {
     public function __construct(
         private readonly DevicePlanCatalog $plans,
+        private readonly DeviceAppCatalog $apps,
         private readonly DevicePushNotifier $push,
     ) {}
 
@@ -73,8 +74,41 @@ final class DeviceSubscriptionService
             'phone' => $phone,
             'is_verified' => false,
             'fcm_token' => $fcmToken,
+            ...$this->grantTrial($appName),
             ...$planRequest,
         ]);
+    }
+
+    /**
+     * The free trial, stamped once at registration for apps that configure one.
+     *
+     * Granting it **only on creation** is what makes it unfarmable: the row is
+     * keyed by (app_name, device_id) and Android's ANDROID_ID survives uninstall
+     * and data-clear, so a reinstall finds the existing row and takes this path's
+     * absence — it cannot mint a second trial. Devices already known (including
+     * the imported legacy rows) are never retro-granted one.
+     *
+     * `expires_at` carries the trial expiry because the app gates on that field
+     * and never reads `trial_expires_at`; the latter is our own record that a
+     * trial was given, and it survives conversion to a paid plan.
+     *
+     * @return array<string, mixed>
+     */
+    private function grantTrial(string $appName): array
+    {
+        $days = $this->apps->trialDays($appName);
+
+        if ($days <= 0) {
+            return [];
+        }
+
+        $expiresAt = Carbon::now()->addDays($days);
+
+        return [
+            'is_verified' => true,
+            'expires_at' => $expiresAt,
+            'trial_expires_at' => $expiresAt,
+        ];
     }
 
     /**
@@ -194,10 +228,13 @@ final class DeviceSubscriptionService
                 }
 
                 [$title, $type] = $message;
+                // Per-app label: one deployment serves several apps, so a Fawateer
+                // user must not be asked to renew "المندوب الذكي".
+                $label = $this->apps->label((string) $device->app_name);
                 $this->push->send(
                     (string) $device->fcm_token,
                     $title,
-                    "عزيزي {$device->full_name}، يرجى تجديد اشتراكك في المندوب الذكي للاستمرار دون انقطاع.",
+                    "عزيزي {$device->full_name}، يرجى تجديد اشتراكك في {$label} للاستمرار دون انقطاع.",
                     $type,
                 );
                 $sent++;

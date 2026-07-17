@@ -161,19 +161,35 @@ Tests assert the exact shipped-app payloads, including the FCM-only rotation bod
 **Exit met:** every request the shipped app can make is served with the shape it
 parses. `is_trial` is wired end-to-end but stays `0` until Phase B grants trials.
 
-### Phase B — Server-granted trial 🚧
+### Phase B — Server-granted trial ✅ (done)
 
 Per the app's owner-locked design.
 
-- `create_device`, first registration, no plan ⇒ `trial_expires_at = now + 30d`,
-  `status = 'trial'`.
-- Return the trial expiry in **`expires_at`** — the app never reads a field named
-  `trial_expires_at`.
-- Re-registration must **not** mint a second trial (ANDROID_ID survives reinstall —
-  that's the anti-abuse anchor).
-- Operator activation overwrites the trial expiry; no new endpoint.
+- First registration ⇒ `is_verified = true`, `expires_at = trial_expires_at =
+  now + 30d`. The expiry rides **`expires_at`** because that is the field the app
+  gates on; it never reads `trial_expires_at`.
+- **Per-app, by config** (`device-subscriptions.apps`, keyed on the `app_name` the
+  client sends, case-insensitive). **Fawateer 30 days; SmartAgent 0.** The trial is
+  Fawateer's design — granting it platform-wide would have silently changed
+  SmartAgent's monetization. An unconfigured app inherits nobody's trial.
+- **Unfarmable:** granted only on row creation. ANDROID_ID survives uninstall and
+  data-clear, so a reinstall finds the existing row and gets nothing. Devices
+  already known — including the imported legacy rows — are never retro-granted.
+- Conversion needs no new endpoint and no flag to clear: operator activation sets
+  `plan_id`, which ends the trial by definition. `trial_expires_at` is retained as
+  the record that a trial was spent.
+- **Also fixed:** `create_device` answered with the **raw** `is_verified` while
+  `check_device` forced it to `0` past expiry. Harmless while every device was
+  operator-activated; with trials it meant a lapsed-trial device re-registering was
+  told it was verified alongside a past `expires_at`. Both endpoints now answer with
+  one definition (`isActive()`).
+- **Also fixed:** expiry-reminder push was hardcoded to "المندوب الذكي", so a
+  Fawateer user would be told to renew SmartAgent. Now uses the per-app label.
 
-**Exit:** a fresh install is usable for 30 days, and cannot farm a second trial.
+**24 module tests green (157 suite-wide); Pint + Larastan max clean.**
+
+**Exit met:** a fresh Fawateer install is usable for 30 days with no operator action,
+and cannot farm a second trial.
 
 ### Phase C — Operator console 🚧
 
