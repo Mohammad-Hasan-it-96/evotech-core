@@ -2,9 +2,23 @@
 
 > **Verified live:** 2026-07-17 against `https://api.evotech-sys.com` and the legacy
 > backend. Every claim below was tested, not assumed.
-> **Verdict:** ❌ **Do not repoint the app yet.** The platform is ready; the *data* is not.
-> One step stands between you and a safe cutover — and skipping it breaks paying
-> customers **silently, 30 days from now**.
+>
+> ## ✅ Verdict: Fawateer can be cut over now. SmartAgent cannot.
+>
+> **Correcting an earlier claim in this document.** I first reported "2 paying Fawateer
+> customers" — that was wrong. I read `is_verified = 1` as "paying". It is not.
+>
+> **Not one Fawateer device has a `plan_id`. Nobody has bought anything.** The two
+> verified rows are: one with **no expiry at all** (permanent — almost certainly your own
+> device) and one hand-granted 30-day trial. The third is literally `probe_test_123`.
+>
+> So for **Fawateer** the import is *housekeeping*, not a blocker — worst case those
+> devices re-register and get a fresh 30-day trial, and you re-activate them in the
+> console in seconds. Nobody can lose a purchase that was never made.
+>
+> **SmartAgent is the exact opposite: 11 verified devices, all 11 holding a real plan**
+> (`yearly` ×9, `half_year` ×2). Those are paying customers, and it has **no trial** to
+> cushion a mistake. **Import is mandatory before SmartAgent's cutover.**
 
 ---
 
@@ -27,33 +41,43 @@ API side is done.**
 
 ---
 
-## 2. 🚨 BLOCKER — Fawateer already has paying users on the old backend
+## 2. Who is actually on the old backend
 
-Counted on the legacy backend today (counts only, no PII read):
+Counted today (counts only — no names or phones read):
 
-| `app_name` | devices | **`is_verified` (paid)** |
-|---|---|---|
-| `SmartAgent` | 43 | **11** |
-| **`Fawateer`** | **3** | **2** |
-| `daftar_hesabat` | 2 | **1** |
-| `Smart Agent` *(with a space)* | 1 | **1** |
-| `test` | 1 | 0 |
-| **Total** | **50** | **15** |
+| `app_name` | devices | verified | **has a real plan** | never expires |
+|---|---|---|---|---|
+| `SmartAgent` | 43 | 11 | **11** ⚠️ | 1 |
+| **`Fawateer`** | **3** | **2** | **0** ✅ | 1 |
+| `daftar_hesabat` | 2 | 1 | **1** ⚠️ | 0 |
+| `Smart Agent` *(space)* | 1 | 1 | **1** ⚠️ | 0 |
+| `test` | 1 | 0 | 0 | 0 |
+| **Total** | **50** | **15** | **13** | 2 |
 
-**Fawateer is not a fresh launch — it has 3 devices, 2 of them paid.**
+Plans in use: `yearly` ×9, `half_year` ×2, **`one_month_free` ×2**.
 
-### Why flipping now is worse than it looks
+**`is_verified` is not the same as paying.** It just means "unlocked" — an operator can
+set it with no plan at all, which is exactly what happened to Fawateer's two devices.
+The column that means money is `plan_id`, and Fawateer's is empty across the board.
 
-The trial **hides the damage for a month**:
+### Why the distinction decides the cutover
+
+If a device with a **real plan** is missing when its app switches over, the trial
+**hides the damage for a month**:
 
 1. Flip the base URL.
-2. A paying customer's app calls `check_device` → the new server has never heard of
-   them → `404` → the app reads that as **not verified**.
+2. Their app calls `check_device` → the new server has never heard of them → `404` →
+   the app reads that as **not verified**.
 3. The app registers → new row → **30-day trial** → unlocked. *Everything looks fine.*
-4. **30 days later their trial lapses and they are locked out** — having paid for a year.
+4. **30 days later the trial lapses and they are locked out** — having paid for a year.
 
-You would not find out today. You'd find out in August, from an angry customer, with
-no obvious cause. **Import first and none of this happens.**
+You would not find out today. You'd find out in August, from an angry customer, with no
+obvious cause. That is the SmartAgent risk (11 devices), **not** the Fawateer one (0).
+
+> Note `one_month_free` is not in the plan catalog. Harmless — imported rows keep their
+> own `expires_at`, and the console can only offer configured plans — but if you ever
+> want to *grant* that plan again, it needs a config entry, or it activates a **0-month
+> term**.
 
 ---
 
@@ -95,24 +119,124 @@ it stays open for as long as that server runs. **Retire it once cutover complete
 
 ## 5. What's left — in order
 
-### 🔴 1. Import the legacy devices — **the only true blocker**
+### 🔴 1. Import the legacy devices
+
+Mandatory before **SmartAgent**; housekeeping for **Fawateer**. Do all 50 in one pass —
+importing early costs nothing and removes the risk from every later cutover.
+
+#### The schema difference — there isn't one that matters
+
+The new table is a **strict superset**. Every old column maps 1:1, and every new column
+is nullable or generated. **Nothing is lost, nothing needs transforming.**
+
+| `app_harfoshs` (old) | `device_subscriptions` (new) | Note |
+|---|---|---|
+| `id` int | *(not carried)* | Identity is (`app_name`,`device_id`), not the old PK |
+| `app_name` varchar(50) | `app_name` varchar(50) | ✅ |
+| `device_id` varchar(200) | `device_id` varchar(200) | ✅ |
+| `full_name`, `phone` | same | ✅ |
+| `is_verified` tinyint | `is_verified` bool | ✅ |
+| `expires_at` | `expires_at` | ✅ **preserved — this is what keeps a paid device unlocked** |
+| `plan_id` varchar(50) | `plan_id` varchar(50) | ✅ free string, so `one_month_free` survives |
+| `fcm_token`, `stars`, `comment` | same | ✅ |
+| `created_at`, `updated_at` | same | ✅ preserved, not reset |
+| — | `uuid` | generated per row |
+| — | `status`, `trial_expires_at`, `requested_plan`, `contact_method` | **NULL** |
+
+`trial_expires_at` stays NULL for imported rows — and that is deliberate: **the import
+does not grant trials.** Trials are stamped only by `create_device` on a brand-new row,
+so a 43-device SmartAgent import cannot accidentally hand out 43 free months.
+
+#### Pre-flight — already run against the live data ✅
+
+| Check | Result |
+|---|---|
+| Duplicate (`app_name`,`device_id`) — would break the unique index | **0** |
+| NULL/empty `app_name` or `device_id` — would be skipped | **0** |
+| Rows using the shared `fallback_device_id` | **0** |
+| Columns in old data with no home in the new table | **none** |
+
+**The data is clean. The import should be uneventful.**
+
+#### Step 1 — back up first (both sides)
 
 ```bash
-DEVICE_LEGACY_CONNECTION=legacy php artisan device-subscriptions:import-legacy --dry-run
-DEVICE_LEGACY_CONNECTION=legacy php artisan device-subscriptions:import-legacy
+# the source of truth, before touching anything
+mysqldump -u <user> -p <legacy_db> app_harfoshs > app_harfoshs_$(date +%F).sql
+
+# and the target, so a bad import is one restore away
+mysqldump -u <user> -p evotech_core device_subscriptions > device_subscriptions_before_import.sql
 ```
 
-Re-runnable; upserts on (`app_name`, `device_id`). Bring **all 50** rows, not just
-Fawateer's — SmartAgent's 11 paying users need them there before *its* cutover, and
-importing early costs nothing.
+#### Step 2 — point at the legacy database
 
-**Needs a DB connection to the legacy MySQL.** Still unanswered: *is
-`harrypotter.foodsalebot.com` yours, and is its database reachable?*
+Add a second connection in `config/database.php` (copy the `mysql` block):
 
-- **If yes** → add a `legacy` connection to `config/database.php` and run the above.
-- **If no** → the public `getDevice` endpoint (§4) exposes every row as JSON. Say the
-  word and I'll add an HTTP source to the import command; it's a small change and it
-  removes the dependency on database access entirely.
+```php
+'legacy' => [
+    'driver' => 'mysql',
+    'host' => env('DEVICE_LEGACY_HOST', '127.0.0.1'),
+    'port' => env('DEVICE_LEGACY_PORT', '3306'),
+    'database' => env('DEVICE_LEGACY_DATABASE'),
+    'username' => env('DEVICE_LEGACY_USERNAME'),
+    'password' => env('DEVICE_LEGACY_PASSWORD'),
+    'charset' => 'utf8mb4',
+    'collation' => 'utf8mb4_0900_ai_ci',   // matches app_harfoshs
+],
+```
+
+`.env` on the API server:
+
+```
+DEVICE_LEGACY_CONNECTION=legacy
+DEVICE_LEGACY_TABLE=app_harfoshs
+DEVICE_LEGACY_HOST=...
+DEVICE_LEGACY_DATABASE=...
+DEVICE_LEGACY_USERNAME=...
+DEVICE_LEGACY_PASSWORD=...
+```
+
+If the legacy MySQL only listens locally, the simplest route is an SSH tunnel from the
+API box:
+`ssh -L 3307:127.0.0.1:3306 user@old-host` → then `DEVICE_LEGACY_PORT=3307`.
+
+#### Step 3 — dry run, then import
+
+```bash
+php artisan device-subscriptions:import-legacy --dry-run   # expect: "Would import 50; skipped 0"
+php artisan device-subscriptions:import-legacy             # expect: "Imported 50; skipped 0"
+```
+
+Re-runnable — it upserts on the device identity, so running it twice is safe and a
+second run picks up anything that changed on the old server in between.
+
+#### Step 4 — verify before you flip
+
+```bash
+# 50 rows, and 13 of them carrying a real plan
+php artisan tinker --execute="
+  echo Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription::count().' rows; ';
+  echo Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription::whereNotNull('plan_id')->count().' with a plan;';
+"
+```
+
+Then the check that actually matters — a real device must come back with **its original
+expiry, not a fresh trial**:
+
+```bash
+curl -s -X POST https://api.evotech-sys.com/api/fawateer/check_device \
+  -H 'Content-Type: application/json' \
+  -d '{"app_name":"SmartAgent","device_id":"<a real imported device_id>"}'
+# want: is_verified 1, is_trial 0, plan "yearly", expires_at = the ORIGINAL date
+```
+
+`is_trial: 0` is the signal. If it says `1`, the import missed that device.
+
+#### No database access? There is a second path
+
+The legacy `getDevice` endpoint is public (§4) and returns all 50 rows as JSON. If the
+old MySQL is unreachable, say so and I'll add an HTTP source to the import command —
+a small change that drops the database dependency entirely.
 
 ### 🟠 2. Decide Fawateer's pricing
 
