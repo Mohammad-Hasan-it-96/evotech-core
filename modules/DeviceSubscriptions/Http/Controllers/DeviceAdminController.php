@@ -170,4 +170,30 @@ final class DeviceAdminController extends ApiController
 
         return DeviceSubscriptionResource::make($device);
     }
+
+    /**
+     * POST /api/v1/device-subscriptions/{deviceSubscription}/decline.
+     *
+     * The "no" the console never had. Without it the only way to clear a request
+     * the operator would not fulfil was to activate it — selling a plan to close
+     * a ticket — so junk requests accumulated and the pending queue stopped being
+     * a work list.
+     *
+     * Refused unless a request is actually open: declining a row with no pending
+     * intent would stamp `declined` on an ordinary device, which reads in the
+     * console as "this customer was rejected" about someone who never asked for
+     * anything. Idempotent re-declines are refused for the same reason.
+     */
+    public function declineV1(DeviceSubscription $deviceSubscription): DeviceSubscriptionResource|JsonResponse
+    {
+        if ($deviceSubscription->status !== DeviceSubscription::STATUS_PENDING) {
+            return response()->json([
+                'message' => 'This device has no pending request to decline.',
+            ], 422);
+        }
+
+        $device = $this->devices->declineRequest($deviceSubscription);
+
+        return DeviceSubscriptionResource::make($device);
+    }
 }

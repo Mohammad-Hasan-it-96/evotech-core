@@ -51,6 +51,19 @@ class DeviceSubscription extends Model
      */
     public const FALLBACK_DEVICE_ID = 'fallback_device_id';
 
+    /**
+     * `status` tracks the purchase intent only, never the subscription.
+     *
+     * PENDING is written by the app when the user asks to buy; the operator then
+     * either activates (which clears it back to null) or declines. A device with
+     * no open request has null here — including one with a perfectly good paid
+     * plan, because whether someone is *asking* to buy is a different question
+     * from whether they currently *have* access.
+     */
+    public const STATUS_PENDING = 'pending';
+
+    public const STATUS_DECLINED = 'declined';
+
     /** @use HasFactory<DeviceSubscriptionFactory> */
     use HasFactory;
 
