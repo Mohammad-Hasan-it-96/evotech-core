@@ -64,6 +64,28 @@ at `evotech-web` `/dashboard/devices`:
 | GET | `/api/v1/device-subscriptions` | Paginated. Filters: `status` (`pending` = the work queue), `app_name`, `q` (searches `device_id`, `full_name`, `phone`). |
 | GET | `/api/v1/device-subscriptions/plans` | The catalog to activate against — the same one the apps see, so an operator cannot pick a plan id the device would not recognise. |
 | POST | `/api/v1/device-subscriptions/{deviceSubscription}/activate` | Activate/extend. **Closes the pending request** (`status → null`); `requested_plan` is kept, since the operator may sell a different plan. |
+| POST | `/api/v1/device-subscriptions/{deviceSubscription}/decline` | Reject the request (`status → declined`). **Touches nothing else** — a device holding a trial or a paid plan keeps it. 422 unless a request is actually open. |
+
+### The purchase-intent lifecycle
+
+`status` tracks the *request*, never the subscription — a device can hold a paid
+plan and still have an open request, and the two answer different questions.
+
+```
+        app files intent            operator activates
+null ──────────────────► pending ──────────────────────► null   (+ plan, expiry, push)
+ ▲                          │
+ │                          └──────► declined  (operator declines; access untouched)
+ │                                      │
+ └──────────────────────────────────────┘  customer asks again → pending
+```
+
+Declining exists because the console could previously only say *yes*: the only way
+to clear a request the operator would never fulfil was to activate it — selling a
+plan to close a ticket — so junk accumulated and `status=pending` stopped meaning
+"work to do". No push is sent: neither shipped app understands a "declined" type,
+and the app has already funnelled the user to WhatsApp/Telegram, so the operator
+is in conversation with them anyway.
 
 ## Plans
 
@@ -111,7 +133,7 @@ activation converts it by setting `plan_id`, which ends the trial by definition;
 |---|---|
 | `Domain\Models\DeviceSubscription` | `HasUuid` route key; **no** tenancy. `isActive()` = verified **and** unexpired. `isOnTrial()` = has a `trial_expires_at`, no `plan_id` yet, still active — so activation ends the trial by setting `plan_id`, with no flag to rewrite. `scopeForDevice()`. |
 | `Domain\Enums\DevicePlan` | `half_year` / `yearly` + `durationMonths()`. |
-| `Application\Services\DeviceSubscriptionService` | register/check/update/review/activate/list + `sweepExpiryReminders()`. Emits `DeviceActivated`. |
+| `Application\Services\DeviceSubscriptionService` | register/check/update/review/activate/decline/list + `sweepExpiryReminders()`. Emits `DeviceActivated`. |
 | `Application\Services\DevicePlanCatalog` | read model over the config plans. |
 | `Domain\Contracts\DevicePushNotifier` | push abstraction; `NullPushNotifier` (safe default), `FirebasePushNotifier` (FCM HTTP v1 — set `DEVICE_PUSH_NOTIFIER=firebase`). |
 | `Console\SweepDeviceExpiryCommand` | `device-subscriptions:sweep-expiry` — **scheduled daily**; sends expiry pushes at expired/7/3/1 days (replaces the legacy cron endpoint). |

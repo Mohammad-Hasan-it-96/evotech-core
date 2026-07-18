@@ -230,6 +230,34 @@ final class DeviceSubscriptionService
     }
 
     /**
+     * Reject an open purchase intent.
+     *
+     * The counterpart to activate(): the console could only ever say yes, so a
+     * request the operator was never going to fulfil — a duplicate, a test, a
+     * customer who never paid — sat in the queue permanently and the queue
+     * stopped meaning "work to do".
+     *
+     * This touches `status` and nothing else. A device may hold a live trial or a
+     * paid plan and still file a new request, so revoking access here would
+     * punish someone for asking; "we are not selling you this" and "you no longer
+     * have what you bought" are different statements. `requested_plan` is kept as
+     * the record of what was asked for.
+     *
+     * Reversible by the customer: asking again from the app writes `pending` back
+     * and the row rejoins the queue.
+     *
+     * No push is sent — neither shipped app understands a "declined" type, and
+     * the app funnels the user to WhatsApp/Telegram, so the operator is already
+     * in conversation with them.
+     */
+    public function declineRequest(DeviceSubscription $device): DeviceSubscription
+    {
+        $device->update(['status' => DeviceSubscription::STATUS_DECLINED]);
+
+        return $device;
+    }
+
+    /**
      * All devices, latest first — backs the admin listing (legacy getDevice).
      *
      * @return Collection<int, DeviceSubscription>

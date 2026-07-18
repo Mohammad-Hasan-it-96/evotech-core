@@ -91,4 +91,6 @@ Route::prefix('api/v1')
             ->name('device-subscriptions.plans');
         Route::post('device-subscriptions/{deviceSubscription}/activate', [DeviceAdminController::class, 'activateV1'])
             ->name('device-subscriptions.activate');
+        Route::post('device-subscriptions/{deviceSubscription}/decline', [DeviceAdminController::class, 'declineV1'])
+            ->name('device-subscriptions.decline');
     });
