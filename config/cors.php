@@ -16,13 +16,13 @@ return [
     */
 
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
-'allowed_origins' => [
-    'https://evotech-sys.com',
-    'https://www.evotech-sys.com',
-    'https://app.evotech-sys.com',
-   ],
-	'allowed_methods' => ['*'],
-	'allowed_headers' => ['*'],
-	'supports_credentials' => false,   // token auth — no cookies needed
+    'allowed_origins' => [
+        'https://evotech-sys.com',
+        'https://www.evotech-sys.com',
+        'https://app.evotech-sys.com',
+    ],
+    'allowed_methods' => ['*'],
+    'allowed_headers' => ['*'],
+    'supports_credentials' => false,   // token auth — no cookies needed
 
 ];
