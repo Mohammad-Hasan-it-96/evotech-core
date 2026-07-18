@@ -4,6 +4,7 @@ namespace Modules\DeviceSubscriptions\Application\Services;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
+use Modules\Core\Domain\Contracts\AuditLogger;
 use Modules\DeviceSubscriptions\Domain\Contracts\DevicePushNotifier;
 use Modules\DeviceSubscriptions\Domain\Events\DeviceActivated;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
@@ -19,6 +20,7 @@ final class DeviceSubscriptionService
         private readonly DevicePlanCatalog $plans,
         private readonly DeviceAppCatalog $apps,
         private readonly DevicePushNotifier $push,
+        private readonly AuditLogger $audit,
     ) {}
 
     public function find(string $deviceId, string $appName): ?DeviceSubscription
@@ -255,6 +257,45 @@ final class DeviceSubscriptionService
         $device->update(['status' => DeviceSubscription::STATUS_DECLINED]);
 
         return $device;
+    }
+
+    /**
+     * Remove a device row entirely.
+     *
+     * For junk an operator should not have to live with: smoke-test rows, the
+     * inert `fallback_device_id` bucket entries, duplicates from before the
+     * unique index existed.
+     *
+     * The row is the only record that the device exists, so this is audited
+     * before it goes — otherwise a deletion is indistinguishable from a device
+     * that was never registered. Recorded through Core's port, so this module
+     * still does not depend on Audit (§2.4).
+     *
+     * **Deleting restores trial eligibility.** The trial is granted only when a
+     * row is created ([grantTrial]), which is exactly what makes it unfarmable —
+     * a reinstall finds the existing row. Delete that row and the next
+     * registration is a first registration, so the device gets another full
+     * trial. Not a bug to fix here (the alternative is a tombstone table), but
+     * the reason the console warns before doing this to an app that trials.
+     */
+    public function deleteDevice(DeviceSubscription $device): void
+    {
+        $this->audit->log(
+            'device_subscription.deleted',
+            'device_subscription',
+            $device->uuid,
+            [
+                'app_name' => $device->app_name,
+                'device_id' => $device->device_id,
+                'full_name' => $device->full_name,
+                'plan_id' => $device->plan_id,
+                'expires_at' => $device->expires_at?->toIso8601String(),
+                'was_active' => $device->isActive(),
+                'was_on_trial' => $device->isOnTrial(),
+            ],
+        );
+
+        $device->delete();
     }
 
     /**
