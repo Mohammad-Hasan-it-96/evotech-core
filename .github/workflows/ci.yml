@@ -83,3 +83,68 @@ jobs:
 
       - name: Dependency security audit
         run: composer audit --no-dev
+
+  deploy:
+    name: Deploy to production
+    # Only after the full gate above is green, and only for main. A PR must never
+    # reach the server, and a red build must never become the running code.
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    # Serialise deploys. Two pushes in quick succession would otherwise run
+    # composer install and migrate against the same directory concurrently.
+    # cancel-in-progress stays false: a half-finished deploy is worse than a
+    # queued one.
+    concurrency:
+      group: deploy-api
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -Eeuo pipefail
+            cd "${{ secrets.API_PATH }}"
+
+            # Refuse to deploy over local edits. The web server grew its own
+            # commit once this way; deploying over it either loses that work or
+            # resurrects the divergence.
+            if [ -n "$(git status --porcelain)" ]; then
+              git status --short
+              echo "Working tree is dirty — refusing to deploy." >&2
+              exit 1
+            fi
+
+            git pull --ff-only origin main
+
+            # --no-dev: production must not carry PHPUnit/Larastan.
+            composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+            php artisan migrate --force
+
+            # Clear, not cache. A cached config makes env() return null at
+            # runtime, which is exactly how a missing FCM or admin credential
+            # turns into a silent no-op instead of a loud failure.
+            php artisan config:clear
+            php artisan route:clear
+            php artisan view:clear
+
+            # Workers hold the old code in memory until told otherwise.
+            php artisan queue:restart
+
+      # API_BASE_URL is the origin with no trailing slash, e.g.
+      # https://api.evotech-sys.com. `/up` is Laravel 12's built-in health route.
+      - name: Health check
+        env:
+          BASE: ${{ secrets.API_BASE_URL }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$BASE/up")
+          echo "up: $code"
+          [ "$code" = "200" ] || { echo "API is not healthy after deploy" >&2; exit 1; }
