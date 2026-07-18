@@ -218,6 +218,7 @@ final class DeviceSubscriptionService
 
         if ($device->fcm_token) {
             $this->push->send(
+                (string) $device->app_name,
                 $device->fcm_token,
                 '🎉 تم تفعيل اشتراكك بنجاح!',
                 "أهلاً {$device->full_name}! تم تفعيل خطّتك بنجاح ✅\nتنتهي بتاريخ: {$expiresAt->format('Y/m/d')}",
@@ -273,6 +274,7 @@ final class DeviceSubscriptionService
                 // user must not be asked to renew "المندوب الذكي".
                 $label = $this->apps->label((string) $device->app_name);
                 $this->push->send(
+                    (string) $device->app_name,
                     (string) $device->fcm_token,
                     $title,
                     "عزيزي {$device->full_name}، يرجى تجديد اشتراكك في {$label} للاستمرار دون انقطاع.",
