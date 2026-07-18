@@ -11,9 +11,10 @@ use Modules\DeviceSubscriptions\Domain\Contracts\DevicePushNotifier;
  */
 final class NullPushNotifier implements DevicePushNotifier
 {
-    public function send(string $token, string $title, string $body, string $type): void
+    public function send(string $appName, string $token, string $title, string $body, string $type): void
     {
         Log::debug('DeviceSubscriptions push suppressed (null notifier).', [
+            'app' => $appName,
             'type' => $type,
             'title' => $title,
         ]);

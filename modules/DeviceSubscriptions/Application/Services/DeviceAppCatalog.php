@@ -44,6 +44,39 @@ final class DeviceAppCatalog
     }
 
     /**
+     * The app's Firebase project + service-account path, or null when it has no
+     * usable credential configured.
+     *
+     * Each app is its own Firebase project, so this is deliberately not a global
+     * setting: sending a Fawateer token through SmartAgent's project fails with
+     * 404 UNREGISTERED. Returning null (rather than a partial array) means the
+     * caller has exactly one thing to check before sending.
+     *
+     * @return array{project_id: string, credentials: string}|null
+     */
+    public function firebase(string $appName): ?array
+    {
+        $firebase = $this->settings($appName)['firebase'] ?? null;
+
+        if (! is_array($firebase)) {
+            return null;
+        }
+
+        $projectId = $firebase['project_id'] ?? null;
+        $credentials = $firebase['credentials'] ?? null;
+
+        if (! is_string($projectId) || $projectId === '') {
+            return null;
+        }
+
+        if (! is_string($credentials) || $credentials === '') {
+            return null;
+        }
+
+        return ['project_id' => $projectId, 'credentials' => $credentials];
+    }
+
+    /**
      * The app_name behind a URL slug (`/api/{slug}/*`), or null if unknown.
      *
      * Unknown slugs resolve to null rather than erroring: the caller then serves

@@ -3405,6 +3405,72 @@
                 }
             }
         },
+        "/v1/device-subscriptions/{deviceSubscription}/decline": {
+            "post": {
+                "operationId": "v1.device-subscriptions.decline",
+                "description": "The \"no\" the console never had. Without it the only way to clear a request\nthe operator would not fulfil was to activate it \u2014 selling a plan to close\na ticket \u2014 so junk requests accumulated and the pending queue stopped being\na work list.\n\nRefused unless a request is actually open: declining a row with no pending\nintent would stamp `declined` on an ordinary device, which reads in the\nconsole as \"this customer was rejected\" about someone who never asked for\nanything. Idempotent re-declines are refused for the same reason.",
+                "summary": "POST /api/v1/device-subscriptions/{deviceSubscription}/decline",
+                "tags": [
+                    "DeviceAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "deviceSubscription",
+                        "in": "path",
+                        "required": true,
+                        "description": "The device subscription UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`DeviceSubscriptionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeviceSubscriptionResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "This device has no pending request to decline."
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
         "/v1/downloads/events": {
             "get": {
                 "operationId": "v1.downloads.events.index",

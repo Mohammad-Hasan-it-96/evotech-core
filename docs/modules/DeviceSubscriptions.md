@@ -64,6 +64,28 @@ at `evotech-web` `/dashboard/devices`:
 | GET | `/api/v1/device-subscriptions` | Paginated. Filters: `status` (`pending` = the work queue), `app_name`, `q` (searches `device_id`, `full_name`, `phone`). |
 | GET | `/api/v1/device-subscriptions/plans` | The catalog to activate against — the same one the apps see, so an operator cannot pick a plan id the device would not recognise. |
 | POST | `/api/v1/device-subscriptions/{deviceSubscription}/activate` | Activate/extend. **Closes the pending request** (`status → null`); `requested_plan` is kept, since the operator may sell a different plan. |
+| POST | `/api/v1/device-subscriptions/{deviceSubscription}/decline` | Reject the request (`status → declined`). **Touches nothing else** — a device holding a trial or a paid plan keeps it. 422 unless a request is actually open. |
+
+### The purchase-intent lifecycle
+
+`status` tracks the *request*, never the subscription — a device can hold a paid
+plan and still have an open request, and the two answer different questions.
+
+```
+        app files intent            operator activates
+null ──────────────────► pending ──────────────────────► null   (+ plan, expiry, push)
+ ▲                          │
+ │                          └──────► declined  (operator declines; access untouched)
+ │                                      │
+ └──────────────────────────────────────┘  customer asks again → pending
+```
+
+Declining exists because the console could previously only say *yes*: the only way
+to clear a request the operator would never fulfil was to activate it — selling a
+plan to close a ticket — so junk accumulated and `status=pending` stopped meaning
+"work to do". No push is sent: neither shipped app understands a "declined" type,
+and the app has already funnelled the user to WhatsApp/Telegram, so the operator
+is in conversation with them anyway.
 
 ## Plans
 
@@ -111,9 +133,9 @@ activation converts it by setting `plan_id`, which ends the trial by definition;
 |---|---|
 | `Domain\Models\DeviceSubscription` | `HasUuid` route key; **no** tenancy. `isActive()` = verified **and** unexpired. `isOnTrial()` = has a `trial_expires_at`, no `plan_id` yet, still active — so activation ends the trial by setting `plan_id`, with no flag to rewrite. `scopeForDevice()`. |
 | `Domain\Enums\DevicePlan` | `half_year` / `yearly` + `durationMonths()`. |
-| `Application\Services\DeviceSubscriptionService` | register/check/update/review/activate/list + `sweepExpiryReminders()`. Emits `DeviceActivated`. |
+| `Application\Services\DeviceSubscriptionService` | register/check/update/review/activate/decline/list + `sweepExpiryReminders()`. Emits `DeviceActivated`. |
 | `Application\Services\DevicePlanCatalog` | read model over the config plans. |
-| `Domain\Contracts\DevicePushNotifier` | push abstraction; `NullPushNotifier` (safe default), `FirebasePushNotifier` (scaffold, pending FCM creds — set `DEVICE_PUSH_NOTIFIER=firebase`). |
+| `Domain\Contracts\DevicePushNotifier` | push abstraction; `NullPushNotifier` (safe default), `FirebasePushNotifier` (FCM HTTP v1 — set `DEVICE_PUSH_NOTIFIER=firebase`). |
 | `Console\SweepDeviceExpiryCommand` | `device-subscriptions:sweep-expiry` — **scheduled daily**; sends expiry pushes at expired/7/3/1 days (replaces the legacy cron endpoint). |
 | `Console\ImportLegacyDevicesCommand` | `device-subscriptions:import-legacy` — one-off, re-runnable import of `app_harfoshs` from a separate DB connection (`DEVICE_LEGACY_CONNECTION`); `--dry-run` supported. |
 
@@ -132,8 +154,61 @@ Rollback is flipping that one value back.
 plans, review), the admin auth gate + activation math, the enveloped staff listing, and the
 expiry-sweep command.
 
+## Push notifications (FCM)
+
+Sends over the **FCM HTTP v1** API, matching the payload the shipped apps already
+parse — `data.type` plus `notification.title/body`:
+
+```json
+{"message":{"token":"…","notification":{"title":"…","body":"…"},
+            "data":{"type":"new_plan_activated"},"android":{"priority":"high"}}}
+```
+
+**Each app is its own Firebase project**, so credentials are per-app, not global —
+a service account for one cannot reach the other's devices (FCM answers `404
+UNREGISTERED`). That is why `DevicePushNotifier::send()` takes `$appName` first.
+
+| App | Firebase project | Env var for the service-account path |
+| --- | --- | --- |
+| Fawateer | `fawateer-4c9bc` | `FIREBASE_CREDENTIALS_FAWATEER` |
+| SmartAgent | `smart-agent-5b153` | `FIREBASE_CREDENTIALS_SMARTAGENT` |
+
+Set `DEVICE_PUSH_NOTIFIER=firebase` to enable. The JSON key holds a private key:
+store it **outside the repo** (e.g. `~/secrets/`, mode 600) and never commit it.
+An app with no credential logs a warning and sends nothing, so a half-configured
+deployment degrades instead of erroring.
+
+The OAuth2 token is cached per app for 55 minutes — the expiry sweep sends to many
+devices per run, and minting a JWT per message (as the legacy backend did) would
+turn one token exchange into hundreds.
+
+**Failures are logged, never thrown.** The apps re-check `check_device` on resume,
+so a lost push delays an unlock rather than losing it — while throwing would fail
+the operator's activation request *after* the subscription was already committed.
+
+### Which types each app understands
+
+| `type` | SmartAgent | Fawateer |
+| --- | --- | --- |
+| `new_plan_activated` | ✅ | ✅ |
+| `still_7_days` / `still_3_days` / `still_1_day` | ✅ | ❌ ignored |
+| `plan_deactivated` | ✅ | ❌ ignored |
+
+Activation — the live unlock — uses the one type both accept. The expiry reminders
+still reach Fawateer as a **tray banner** (Android renders the `notification`
+block regardless), but its handler ignores the type, so nothing is shown while the
+app is in the foreground. Fawateer is unreleased, so this is fixable on either side.
+
+`android.notification.channel_id` is deliberately **not** sent: SmartAgent already
+routes to `subscription_channel` via a manifest default, and Fawateer declares no
+channel at all — naming a channel that does not exist makes Android drop the
+notification outright.
+
 ## Follow-ups
 
 - Retire the legacy shim once a new app version ships (versioned API + product key).
-- Implement real FCM sending in `FirebasePushNotifier` (pending credentials).
+- Prune `fcm_token` when FCM reports `UNREGISTERED`, so dead tokens stop being retried
+  every sweep (currently logged only — pruning is a data change, not a transport concern).
+- Decide whether Fawateer should learn the four expiry `type`s, or the sweep should
+  skip types an app cannot handle.
 - Source `app-download` version/links from the Download Center ([ADR 0008](../adr/0008-download-center-delivery.md)) instead of a placeholder config.

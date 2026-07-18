@@ -513,6 +513,126 @@ class DeviceSubscriptionApiTest extends TestCase
         $this->assertSame('12_months', $device->requested_plan);
     }
 
+    public function test_declining_closes_the_request_and_drains_the_queue(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'status' => 'pending',
+            'requested_plan' => 'yearly',
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$device->uuid}/decline")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'declined');
+
+        $this->getJson('/api/v1/device-subscriptions?status=pending')->assertOk()->assertJsonCount(0, 'data');
+
+        // Kept as the record of what was asked for, exactly as activation does.
+        $device->refresh();
+        $this->assertSame('yearly', $device->requested_plan);
+    }
+
+    /**
+     * The decline must not touch the subscription. A device on a live trial or a
+     * paid plan can still file a new request, and refusing to sell someone a plan
+     * is not grounds for taking away the one they already have.
+     */
+    public function test_declining_does_not_revoke_existing_access(): void
+    {
+        $expiresAt = now()->addDays(200)->startOfSecond();
+
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => true,
+            'plan_id' => 'half_year',
+            'expires_at' => $expiresAt,
+            'status' => 'pending',
+            'requested_plan' => 'yearly',
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$device->uuid}/decline")->assertOk();
+
+        $device->refresh();
+        $this->assertTrue($device->is_verified);
+        $this->assertSame('half_year', $device->plan_id);
+        $this->assertNotNull($device->expires_at);
+        $this->assertTrue($expiresAt->equalTo($device->expires_at));
+
+        // And the device itself is still told it is licensed.
+        $this->postJson('/api/check_device', ['device_id' => 'dev-1', 'app_name' => 'Fawateer'])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1);
+    }
+
+    public function test_a_device_with_no_request_cannot_be_declined(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'status' => null,
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$device->uuid}/decline")->assertStatus(422);
+
+        $device->refresh();
+        $this->assertNull($device->status);
+    }
+
+    public function test_a_declined_request_cannot_be_declined_again(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'status' => 'declined',
+        ]);
+
+        $this->actAsStaff();
+        $this->postJson("/api/v1/device-subscriptions/{$device->uuid}/decline")->assertStatus(422);
+    }
+
+    /** The customer can always ask again; the row rejoins the queue. */
+    public function test_asking_again_after_a_decline_reopens_the_request(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'status' => 'declined',
+            'requested_plan' => 'yearly',
+        ]);
+
+        $this->postJson('/api/create_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'اسم',
+            'phone' => '0999',
+            'requested_plan' => 'half_year',
+            'contact_method' => 'whatsapp',
+            'status' => 'pending',
+        ])->assertOk();
+
+        $this->actAsStaff();
+        $this->getJson('/api/v1/device-subscriptions?status=pending')->assertOk()->assertJsonCount(1, 'data');
+    }
+
+    public function test_decline_requires_staff_auth(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'status' => 'pending',
+        ]);
+
+        $this->postJson("/api/v1/device-subscriptions/{$device->uuid}/decline")->assertStatus(401);
+
+        $device->refresh();
+        $this->assertSame('pending', $device->status);
+    }
+
     /** The console reads the plan request and trial state off the staff resource. */
     public function test_staff_resource_exposes_request_and_trial_fields(): void
     {

@@ -15,12 +15,6 @@ return [
      */
     'push_notifier' => env('DEVICE_PUSH_NOTIFIER', 'null'),
 
-    'firebase' => [
-        'project_id' => env('FIREBASE_PROJECT_ID'),
-        // Absolute path to (or contents of) the FCM service-account JSON.
-        'credentials' => env('FIREBASE_CREDENTIALS'),
-    ],
-
     /*
      * Legacy data migration source (device-subscriptions:import-legacy). Points at
      * the old app_harfoshs table on a separate DB connection. Leave the connection
@@ -66,6 +60,16 @@ return [
      * `plans` — optional per-app catalog. **Omit it and the app gets the shared
      * `plans` list below** — which is what both apps do today, so nothing changes
      * until a price is deliberately set here.
+     *
+     * `firebase` — the app's OWN Firebase project. These are genuinely separate
+     * projects, not two apps in one, so a credential is not interchangeable: a
+     * service account for smart-agent-5b153 cannot reach a Fawateer device
+     * because that token does not exist in that project (FCM answers 404
+     * UNREGISTERED). Hence per-app rather than one global credential.
+     *
+     * `credentials` is an absolute path to the service-account JSON — keep it
+     * OUTSIDE the repo (it holds a private key) and never commit it. Leave the
+     * env unset and pushes for that app no-op with a warning.
      */
     'apps' => [
         'Fawateer' => [
@@ -73,11 +77,19 @@ return [
             'trial_days' => 30,
             'slug' => 'fawateer',
             // 'plans' => [...],  // ← per-app catalog; omitted = the shared list below.
+            'firebase' => [
+                'project_id' => env('FIREBASE_PROJECT_ID_FAWATEER', 'fawateer-4c9bc'),
+                'credentials' => env('FIREBASE_CREDENTIALS_FAWATEER'),
+            ],
         ],
         'SmartAgent' => [
             'label' => 'المندوب الذكي',
             'trial_days' => 0,
             'slug' => 'smartagent',
+            'firebase' => [
+                'project_id' => env('FIREBASE_PROJECT_ID_SMARTAGENT', 'smart-agent-5b153'),
+                'credentials' => env('FIREBASE_CREDENTIALS_SMARTAGENT'),
+            ],
         ],
     ],
 
