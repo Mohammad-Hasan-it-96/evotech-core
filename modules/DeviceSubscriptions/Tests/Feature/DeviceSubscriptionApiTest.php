@@ -7,6 +7,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Laravel\Sanctum\Sanctum;
+use Modules\Core\Domain\Contracts\AuditLogger;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 use Modules\Users\Domain\Models\User;
 use Tests\TestCase;
@@ -631,6 +632,116 @@ class DeviceSubscriptionApiTest extends TestCase
 
         $device->refresh();
         $this->assertSame('pending', $device->status);
+    }
+
+    public function test_staff_can_delete_a_device_with_no_access(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-junk',
+            'is_verified' => false,
+            'expires_at' => null,
+        ]);
+
+        $this->actAsStaff();
+        $this->deleteJson("/api/v1/device-subscriptions/{$device->uuid}")->assertStatus(204);
+
+        $this->assertSame(0, DeviceSubscription::query()->count());
+    }
+
+    /**
+     * Deleting a device that still has access locks it out of the app with no
+     * message — check_device returns nothing and the client reads that as
+     * unverified. Refused unless the caller says so explicitly.
+     */
+    public function test_deleting_a_device_with_access_requires_force(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-paid',
+            'is_verified' => true,
+            'plan_id' => 'yearly',
+            'expires_at' => now()->addMonths(6),
+        ]);
+
+        $this->actAsStaff();
+        $this->deleteJson("/api/v1/device-subscriptions/{$device->uuid}")->assertStatus(422);
+
+        $this->assertSame(1, DeviceSubscription::query()->count());
+
+        $this->deleteJson("/api/v1/device-subscriptions/{$device->uuid}", ['force' => true])
+            ->assertStatus(204);
+
+        $this->assertSame(0, DeviceSubscription::query()->count());
+    }
+
+    /** A trial counts as access — it is the case the smoke-test rows fall into. */
+    public function test_a_trialling_device_also_requires_force(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-trial',
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => now()->addDays(20),
+            'trial_expires_at' => now()->addDays(20),
+        ]);
+
+        $this->actAsStaff();
+        $this->deleteJson("/api/v1/device-subscriptions/{$device->uuid}")->assertStatus(422);
+    }
+
+    public function test_delete_requires_staff_auth(): void
+    {
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'is_verified' => false,
+        ]);
+
+        $this->deleteJson("/api/v1/device-subscriptions/{$device->uuid}")->assertStatus(401);
+
+        $this->assertSame(1, DeviceSubscription::query()->count());
+    }
+
+    /**
+     * The delete is recorded before the row goes. Without it a deletion is
+     * indistinguishable from a device that never registered.
+     */
+    public function test_deleting_a_device_is_audited(): void
+    {
+        $logger = new class implements AuditLogger
+        {
+            /** @var array<int, array{action: string, subjectId: ?string}> */
+            public array $entries = [];
+
+            /** @param array<string, mixed> $context */
+            public function log(
+                string $action,
+                ?string $subjectType = null,
+                ?string $subjectId = null,
+                array $context = [],
+                ?string $actorId = null,
+            ): void {
+                $this->entries[] = ['action' => $action, 'subjectId' => $subjectId];
+            }
+        };
+
+        $this->app->instance(AuditLogger::class, $logger);
+
+        $device = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-junk',
+            'is_verified' => false,
+        ]);
+
+        $this->actAsStaff();
+        $this->deleteJson("/api/v1/device-subscriptions/{$device->uuid}")->assertStatus(204);
+
+        $this->assertSame(
+            [['action' => 'device_subscription.deleted', 'subjectId' => $device->uuid]],
+            $logger->entries,
+        );
     }
 
     /** The console reads the plan request and trial state off the staff resource. */

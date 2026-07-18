@@ -196,4 +196,36 @@ final class DeviceAdminController extends ApiController
 
         return DeviceSubscriptionResource::make($device);
     }
+
+    /**
+     * DELETE /api/v1/device-subscriptions/{deviceSubscription}.
+     *
+     * Removes junk an operator should not have to live with: smoke-test rows,
+     * the inert `fallback_device_id` bucket entries, duplicates left by the
+     * pre-unique-index era.
+     *
+     * A device with **live access** needs `force=true`. Deleting one is not a
+     * tidy-up: the app calls `check_device`, gets nothing back, and reads that
+     * as unverified — so a paying customer is locked out of their own app with
+     * no message. That is worth one deliberate extra step, but it is refused
+     * rather than blocked outright, because the rows most in need of deleting
+     * (a smoke test on a trial) are usually still "active".
+     *
+     * There is no undo — the row is the only record the device existed — so the
+     * service audits it before deleting.
+     */
+    public function destroyV1(Request $request, DeviceSubscription $deviceSubscription): JsonResponse
+    {
+        if ($deviceSubscription->isActive() && ! $request->boolean('force')) {
+            return response()->json([
+                'message' => 'This device currently has access'
+                    .($deviceSubscription->isOnTrial() ? ' (on trial)' : '')
+                    .' and would be locked out of the app immediately. Re-send with force=true to delete it anyway.',
+            ], 422);
+        }
+
+        $this->devices->deleteDevice($deviceSubscription);
+
+        return response()->json(status: 204);
+    }
 }

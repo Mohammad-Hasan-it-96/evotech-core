@@ -3471,6 +3471,64 @@
                 }
             }
         },
+        "/v1/device-subscriptions/{deviceSubscription}": {
+            "delete": {
+                "operationId": "v1.device-subscriptions.destroy",
+                "description": "Removes junk an operator should not have to live with: smoke-test rows,\nthe inert `fallback_device_id` bucket entries, duplicates left by the\npre-unique-index era.\n\nA device with **live access** needs `force=true`. Deleting one is not a\ntidy-up: the app calls `check_device`, gets nothing back, and reads that\nas unverified \u2014 so a paying customer is locked out of their own app with\nno message. That is worth one deliberate extra step, but it is refused\nrather than blocked outright, because the rows most in need of deleting\n(a smoke test on a trial) are usually still \"active\".\n\nThere is no undo \u2014 the row is the only record the device existed \u2014 so the\nservice audits it before deleting.",
+                "summary": "DELETE /api/v1/device-subscriptions/{deviceSubscription}",
+                "tags": [
+                    "DeviceAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "deviceSubscription",
+                        "in": "path",
+                        "required": true,
+                        "description": "The device subscription UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {}
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
         "/v1/downloads/events": {
             "get": {
                 "operationId": "v1.downloads.events.index",
