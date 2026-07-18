@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.2",
         "dedoc/scramble": "^0.13.30",
+        "google/auth": "^1.52",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1"

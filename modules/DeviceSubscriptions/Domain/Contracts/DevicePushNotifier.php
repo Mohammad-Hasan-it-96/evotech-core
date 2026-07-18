@@ -11,8 +11,11 @@ namespace Modules\DeviceSubscriptions\Domain\Contracts;
 interface DevicePushNotifier
 {
     /**
+     * @param  string  $appName  which app to send as — each has its OWN Firebase
+     *                           project, so the credential is not interchangeable
+     *                           and the sender cannot infer it from the token
      * @param  string  $token  the device FCM token
      * @param  string  $type  a machine key echoed to the client (e.g. "new_plan_activated")
      */
-    public function send(string $token, string $title, string $body, string $type): void;
+    public function send(string $appName, string $token, string $title, string $body, string $type): void;
 }
