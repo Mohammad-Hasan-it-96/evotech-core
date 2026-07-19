@@ -190,9 +190,16 @@
                                             ]
                                         },
                                         "downloads": {
-                                            "type": "array",
-                                            "description": "ABI => URL. Keys are matched exactly against the device's reported\nABI, so a typo is an update the device can never find.",
-                                            "items": {}
+                                            "description": "ABI => URL. Keys are matched exactly against the device's reported\nABI, so a typo is an update the device can never find. Cast to an object when empty so this serializes as `{}` rather than\nPHP's `[]`. Both parsers read a JSON list as \"not a map\" and end up\nwith an empty map either way, so this is fidelity to the file it\nreplaces rather than a behaviour fix \u2014 but with parsers this quiet,\nmatching exactly is worth more than matching in effect.",
+                                            "anyOf": [
+                                                {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                {
+                                                    "type": "string"
+                                                }
+                                            ]
                                         },
                                         "update_notes": {
                                             "type": "array",
