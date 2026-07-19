@@ -42,7 +42,20 @@ final class DeviceCatalogController extends ApiController
     {
         $attributes = [];
 
-        foreach (['label', 'trial_days', 'uses_shared_plans'] as $field) {
+        $fields = [
+            'label',
+            'trial_days',
+            'uses_shared_plans',
+            'latest_version',
+            'api_base_url',
+            'downloads',
+            'update_notes',
+            'support_email',
+            'support_whatsapp',
+            'support_telegram',
+        ];
+
+        foreach ($fields as $field) {
             if ($request->has($field)) {
                 $attributes[$field] = $request->validated($field);
             }

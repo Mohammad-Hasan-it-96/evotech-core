@@ -71,8 +71,8 @@ The catalog editor behind `/dashboard/plans`:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/v1/device-apps` | Every app with its terms and plan count. |
-| PATCH | `/api/v1/device-apps/{deviceApp}` | `label`, `trial_days`, `uses_shared_plans`, `product`. **`name`/`slug` are not accepted.** |
+| GET | `/api/v1/device-apps` | Every app with its terms, plan count, and remote config. |
+| PATCH | `/api/v1/device-apps/{deviceApp}` | `label`, `trial_days`, `uses_shared_plans`, `product`, plus the remote-config fields below. **`name`/`slug` are not accepted.** |
 | GET | `/api/v1/device-plans` | One scope: `?app=<uuid>` for that app's own plans, omitted for the shared catalog. **Includes disabled plans** — unlike `device-subscriptions/plans`, which mirrors what the device sees. |
 | POST | `/api/v1/device-plans` | `key` must be unique within its scope. `duration_months` ≥ 1; a 0-month plan expires the moment it is sold. |
 | PATCH | `/api/v1/device-plans/{devicePlan}` | **`key` and `app` are not accepted** — both would orphan existing holders. |
@@ -135,6 +135,31 @@ recoverable from the dashboard, so neither is offered there.
 
 Activation resolves a plan's term in **the device's own** app catalog — the same id may mean a
 different number of months per app.
+
+## The startup remote-config
+
+`GET /api/{slug}/remote-config` (public, unauthenticated — the app calls it before
+it has a base URL, let alone a token). Returned **bare**, with no `{data}` envelope:
+the shipped parsers read the top-level keys directly, so this is the one place in
+the module where the platform envelope is deliberately not used. Full contract:
+[`docs/api/fawateer-device-contract.md`](../api/fawateer-device-contract.md) §9.
+
+Stored on `device_apps` and edited from `/dashboard/plans` → **App config**. It
+replaces a hand-edited static file in evotech-web, which now proxies this endpoint
+at the same URL.
+
+**Everything here fails silently.** Both apps parse defensively — a malformed field
+degrades to a default rather than throwing — so a mistake surfaces as an update
+prompt that never fires, not as an error anyone sees. Hence:
+
+| Field | Guard, and what it prevents |
+|---|---|
+| `latest_version` | Digits and dots only. Compared component-wise with `int.tryParse(part) ?? 0`, so `1.2.0-beta` reads that component as **0** and the update becomes permanently invisible. |
+| `api.base_url` | **Never emitted empty** — falls back to `{app.url}/api/{slug}`. Fawateer would silently keep its compiled-in default; SmartAgent is worse and *resets* to the legacy `harrypotter.foodsalebot.com` host. |
+| `downloads` | Keys restricted to the ABIs the apps actually look up. A key is matched exactly against the device's reported ABI, so a typo is an update no device can find. `default` is the only route to an APK for an x86 device. |
+| `update_notes` | Strings only, serialized as a JSON list. Fawateer's parser drops a bare string outright. |
+
+Firebase credentials are **not** part of this — see the note below.
 
 ## Per-app settings & the free trial
 

@@ -372,6 +372,17 @@ The first thing to check is that `check_device` keeps answering `200`/`404` and 
 
 ## 9. The remote-config file
 
+> **No longer hand-edited.** `evotech-web/public/config/fawateer.json` is gone; the
+> same URL is now a route handler that proxies `GET /api/{slug}/remote-config` and
+> is edited from the dashboard (`/dashboard/plans` → **App config**). The URL, the
+> shape, and the 5-minute cache are unchanged — the app cannot tell the difference.
+>
+> The proxy answers **200 even when the API is unreachable**, falling back to a
+> committed copy (`src/content/device-config-fallback.ts`) and flagging it with an
+> `X-Config-Source: fallback` response header. It returns 200 because both deploy
+> health checks assert on status and one hard-fails the workflow — and because a
+> slightly stale config serves an app far better than no config at all.
+
 Fetched at startup from `_configUrl` and parsed by `RemoteConfig.fromJson`
 (`lib/core/config/remote_config.dart`). It drives **two** things: the API base URL, and
 the in-app update prompt.
@@ -410,6 +421,12 @@ Parsing is **defensive by design** — a malformed field degrades to a default r
 throwing, so a bad publish cannot hard-fail startup. The flip side is that mistakes are
 **silent**: after editing, verify from the app, not from the file.
 
+> **Status: the generator exists, the links do not yet.** `latest_version`,
+> `update_notes`, `support` and `downloads` are dashboard-editable, but `downloads`
+> is still populated by hand. Wiring it to the Download Center's published
+> artifacts — so publishing a release updates the links with no config edit at all
+> — is the remaining step.
+>
 > **This is the same data the Download Center already models** — releases, per-platform
 > artifacts, and a `notes` column. Generating this JSON from the dashboard, rather than
 > hand-editing it, is the natural end state. See

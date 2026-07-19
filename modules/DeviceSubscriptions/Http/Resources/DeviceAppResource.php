@@ -32,6 +32,15 @@ final class DeviceAppResource extends JsonResource
             'trial_days' => $this->trial_days,
             'uses_shared_plans' => $this->uses_shared_plans,
             'plans_count' => $this->whenCounted('plans'),
+
+            // Remote config — what the app fetches at startup.
+            'latest_version' => $this->latest_version,
+            'api_base_url' => $this->api_base_url,
+            'downloads' => $this->downloads ?? (object) [],
+            'update_notes' => $this->update_notes ?? [],
+            'support_email' => $this->support_email,
+            'support_whatsapp' => $this->support_whatsapp,
+            'support_telegram' => $this->support_telegram,
         ];
     }
 }
