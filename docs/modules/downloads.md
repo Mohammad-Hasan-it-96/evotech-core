@@ -37,7 +37,7 @@ visible to products and downloadable. Files never live at a public path — they
 | POST | `/releases/{release}/publish` | `releases.publish` | Publish — **requires ≥1 artifact** (`422` otherwise); audited `release.published`. |
 | POST | `/releases/{release}/archive` | `releases.archive` | Retire a release. |
 | GET | `/releases/{release}/artifacts` | `releases.artifacts.index` | List the release's per-platform artifacts. |
-| POST | `/releases/{release}/artifacts` | `releases.artifacts.store` | Upload (multipart: `file`, `platform`) — checksummed; replaces an existing platform. `201`. Audited `artifact.uploaded`. |
+| POST | `/releases/{release}/artifacts` | `releases.artifacts.store` | Upload (multipart: `file`, `platform`) — checksummed; replaces an existing platform. `201`. Audited `artifact.uploaded`. **Extension allowlist** (installers, archives, firmware images): the endpoint serves files from the platform's own origin, so an `.html` or `.svg` artifact would be script running as this site — and the recorded content type is detected, never enforced. Checked by extension rather than MIME because an APK and a JAR are both `application/zip`. |
 | DELETE | `/artifacts/{artifact}` | `artifacts.destroy` | Soft-delete an artifact and remove its file. `204`. |
 | POST | `/artifacts/{artifact}/link` | `artifacts.link` | Mint a signed download URL (`{data:{url, expires_at}}`); records a `staff` download event. |
 | GET | `/downloads/events` | `downloads.events.index` | Read the download ledger; filter by `artifact` (uuid). |
@@ -48,6 +48,33 @@ visible to products and downloadable. Files never live at a public path — they
 |---|---|---|---|
 | GET | `/downloads/deliver/{artifact}` | `downloads.deliver` | Validate the signature, then stream the file from its private disk with its real filename. The only route that serves bytes; never linked to directly. |
 
+## Endpoint — permanent public download (no auth, `throttle:30,1`, under `/api/v1`)
+
+| Method | Path | Name | Description |
+|---|---|---|---|
+| GET | `/downloads/latest/{product}/{platform}` | `downloads.latest` | 302 to a freshly minted signed link for the **current published** build. `?channel=` defaults to `stable`. `404` for an unknown product/platform/channel or a release that is not published. |
+
+**Why this exists next to signed links.** A signed URL is right for an authenticated
+product self-updating — per-product, audited, short-lived. It is useless for the one
+thing a *consumer app* needs: a URL that can sit inside a config file cached for
+minutes, or a message sent to a customer, and still work tomorrow.
+
+This URL never expires **because it does not name a file**. It names *the current
+build for a platform* and resolves at request time, so publishing 1.0.1 changes what
+it serves with no config edit and no link to reissue — every already-cached copy
+starts pointing at the new build on its own.
+
+It **redirects rather than streaming**, so exactly one route still serves bytes and
+the ledger is reused unchanged (`actor_type` `public`). It is **unauthenticated**
+because the artifacts it can reach are, by definition, published builds already
+handed to anyone who asks — draft and archived releases stay unreachable. Throttled
+per IP because it is the one unauthenticated route that can move gigabytes.
+
+Other modules reach these URLs through Core's **`ReleaseDownloadLocator`** port
+(§2.4) rather than this module — `NullReleaseDownloadLocator` is the safe default,
+and `ReleaseDownloadUrlLocator` here supplies the real answer. `DeviceSubscriptions`
+uses it to fill the consumer apps' remote-config download links automatically.
+
 ## Endpoints — product-facing (`auth:product` + `throttle:product`, under `/api/v1/product`)
 
 Authenticated by a **per-product API key** ([Gateway](gateway.md), [ADR 0004](../adr/0004-product-to-platform-auth-api-keys.md)).
@@ -56,7 +83,7 @@ A product only ever sees/acts on **its own** product's artifacts — any other i
 | Method | Path | Name | Description |
 |---|---|---|---|
 | GET | `/product/releases/latest` | `releases.latest` | The latest **published** release on `channel` (default `stable`), optionally filtered to a `platform`; `404` if none. The auto-update check. |
-| POST | `/product/artifacts/{artifact}/link` | `artifacts.link` | Mint a signed download URL for one of the product's own artifacts; records a `product` download event. |
+| POST | `/product/artifacts/{artifact}/link` | `artifacts.link` | Mint a signed download URL for one of the product's own artifacts; records a `product` download event. **Requires the release to be published** — owning the product is not enough, or a product knowing a uuid could pull an unreleased build. `404`, matching the cross-product case. |
 
 ## Configuration (`config/downloads.php`)
 

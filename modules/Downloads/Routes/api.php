@@ -5,6 +5,7 @@ use Modules\Downloads\Http\Controllers\ArtifactController;
 use Modules\Downloads\Http\Controllers\DeliveryController;
 use Modules\Downloads\Http\Controllers\DownloadEventController;
 use Modules\Downloads\Http\Controllers\Product\ProductReleaseController;
+use Modules\Downloads\Http\Controllers\PublicDownloadController;
 use Modules\Downloads\Http\Controllers\ReleaseController;
 
 /*
@@ -37,6 +38,26 @@ Route::prefix('api/v1')
 
         // Download ledger.
         Route::get('downloads/events', [DownloadEventController::class, 'index'])->name('downloads.events.index');
+    });
+
+/*
+ * Permanent public download URL. Redirects to a freshly minted signed link, so
+ * bytes are still served by exactly one route and every hit lands in the ledger.
+ *
+ * Unauthenticated on purpose: it resolves only to *published* releases — builds
+ * already handed to anyone who asks — and the consumer apps embed this URL in a
+ * cached config file, so there is no credential they could present.
+ *
+ * Throttled per IP because it is the one unauthenticated route that can move
+ * gigabytes. 30/minute is far above any real user and well below a useful abuse
+ * rate.
+ */
+Route::prefix('api/v1')
+    ->name('api.v1.')
+    ->middleware('throttle:30,1')
+    ->group(function (): void {
+        Route::get('downloads/latest/{product}/{platform}', PublicDownloadController::class)
+            ->name('downloads.latest');
     });
 
 /*

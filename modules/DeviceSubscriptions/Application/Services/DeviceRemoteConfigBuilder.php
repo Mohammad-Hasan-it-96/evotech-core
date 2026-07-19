@@ -2,7 +2,9 @@
 
 namespace Modules\DeviceSubscriptions\Application\Services;
 
+use Modules\Core\Domain\Contracts\ReleaseDownloadLocator;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceApp;
+use Modules\Products\Domain\Models\Product;
 
 /**
  * Builds the remote-config payload a shipped app fetches at startup.
@@ -24,6 +26,13 @@ use Modules\DeviceSubscriptions\Domain\Models\DeviceApp;
  */
 final class DeviceRemoteConfigBuilder
 {
+    /*
+     * Reached through Core's port, not the Downloads module (§2.4). Core binds a
+     * no-op default, so this keeps working — with no download links — whether or
+     * not the Download Center is present.
+     */
+    public function __construct(private readonly ReleaseDownloadLocator $locator) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -48,7 +57,7 @@ final class DeviceRemoteConfigBuilder
              * replaces rather than a behaviour fix — but with parsers this quiet,
              * matching exactly is worth more than matching in effect.
              */
-            'downloads' => $this->strings($app->downloads) ?: (object) [],
+            'downloads' => $this->downloads($app) ?: (object) [],
 
             // Must be a list of strings: Fawateer's parser drops a bare string
             // outright, and an object would render as nothing.
@@ -60,6 +69,47 @@ final class DeviceRemoteConfigBuilder
                 'telegram' => (string) ($app->support_telegram ?? ''),
             ],
         ];
+    }
+
+    /**
+     * The app's download links: whatever an operator set by hand, else the current
+     * published build from the Download Center.
+     *
+     * Manual entries win outright rather than merging. Merging would produce a map
+     * an operator never chose and cannot see — half hand-set, half derived — and
+     * the whole point of the manual field is overriding what publishing produces.
+     *
+     * The derived map has a single `default` key, and that is a consequence of the
+     * schema rather than a shortcut: `artifacts` is unique on
+     * (release, platform), so a release holds exactly one Android build. There is
+     * no per-ABI split to derive. `default` is the right key for it — Fawateer
+     * falls back to the first non-empty value when no ABI matches, so one universal
+     * APK reaches every device. Genuinely split per-ABI builds stay a manual
+     * override until artifacts model variants.
+     *
+     * @return array<string, string>
+     */
+    private function downloads(DeviceApp $app): array
+    {
+        $manual = $this->strings($app->downloads);
+
+        if ($manual !== []) {
+            return $manual;
+        }
+
+        if ($app->product_id === null) {
+            return [];
+        }
+
+        $slug = Product::query()->whereKey($app->product_id)->value('slug');
+
+        if (! is_string($slug) || $slug === '') {
+            return [];
+        }
+
+        $android = $this->locator->latestDownloadUrls($slug)['android'] ?? null;
+
+        return is_string($android) && $android !== '' ? ['default' => $android] : [];
     }
 
     /**

@@ -54,6 +54,19 @@ final class ProductReleaseController extends ApiController
 
         abort_unless($artifact->release->product_id === $this->product->productId(), 404);
 
+        /*
+         * Owning the product is not enough — the release must actually be
+         * published. `latest` only ever surfaces published releases, so a product
+         * has no legitimate way to learn an unpublished artifact's uuid; but uuid7
+         * is time-ordered and a product that has seen one artifact can reason about
+         * its neighbours. Without this check, knowing (or guessing) a uuid was
+         * enough to pull an unreleased build.
+         *
+         * 404 rather than 403, matching the cross-product case: a product should
+         * not be able to distinguish "exists but not yours" from "does not exist".
+         */
+        abort_unless($artifact->release->isPublished(), 404);
+
         $link = $this->downloads->issueLink(
             $artifact,
             'product',

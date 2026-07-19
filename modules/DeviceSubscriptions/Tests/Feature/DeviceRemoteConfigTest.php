@@ -6,7 +6,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
+use Modules\Core\Domain\Contracts\ReleaseDownloadLocator;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceApp;
+use Modules\Products\Domain\Models\Product;
 use Modules\Users\Domain\Models\User;
 use Tests\TestCase;
 
@@ -256,6 +258,84 @@ class DeviceRemoteConfigTest extends TestCase
             ]),
             'api_base_url',
         );
+    }
+
+    // --- Download links from the Download Center -------------------------------
+
+    /**
+     * Publishing a release fills in the download link with no config edit — the
+     * step that turns "upload a build" into "users can install it".
+     *
+     * Reached through Core's locator port, so this module never touches the
+     * Downloads models (§2.4). The port is faked here for the same reason: the
+     * behaviour under test is the mapping, not the Download Center.
+     */
+    public function test_a_published_release_fills_in_the_download_link(): void
+    {
+        $this->app->instance(ReleaseDownloadLocator::class, new class implements ReleaseDownloadLocator
+        {
+            /** @return array<string, string> */
+            public function latestDownloadUrls(string $productSlug, ?string $channel = null): array
+            {
+                return $productSlug === 'invoices'
+                    ? ['android' => 'https://api.evotech-sys.com/api/v1/downloads/latest/invoices/android']
+                    : [];
+            }
+        });
+
+        $product = Product::factory()->create(['slug' => 'invoices']);
+        $this->fawateer()->update(['product_id' => $product->id, 'downloads' => null]);
+
+        /*
+         * Keyed `default`, not an ABI: artifacts are unique on (release, platform),
+         * so a release holds exactly one Android build and there is no per-ABI
+         * split to derive. Fawateer falls back to the first non-empty value when no
+         * ABI matches, so one universal APK reaches every device.
+         */
+        $this->getJson('/api/fawateer/remote-config')
+            ->assertOk()
+            ->assertJsonPath(
+                'downloads.default',
+                'https://api.evotech-sys.com/api/v1/downloads/latest/invoices/android',
+            );
+    }
+
+    /**
+     * A hand-set map wins outright rather than merging. Merging would produce a
+     * map the operator never chose and cannot see — half hand-set, half derived —
+     * and overriding what publishing produces is the field's entire purpose.
+     */
+    public function test_manual_links_override_the_published_release(): void
+    {
+        $this->app->instance(ReleaseDownloadLocator::class, new class implements ReleaseDownloadLocator
+        {
+            /** @return array<string, string> */
+            public function latestDownloadUrls(string $productSlug, ?string $channel = null): array
+            {
+                return ['android' => 'https://example.test/derived.apk'];
+            }
+        });
+
+        $product = Product::factory()->create(['slug' => 'invoices']);
+        $this->fawateer()->update([
+            'product_id' => $product->id,
+            'downloads' => ['arm64-v8a' => 'https://example.test/manual.apk'],
+        ]);
+
+        $payload = $this->getJson('/api/fawateer/remote-config')->assertOk();
+
+        $payload->assertJsonPath('downloads.arm64-v8a', 'https://example.test/manual.apk');
+        $payload->assertJsonMissingPath('downloads.default');
+    }
+
+    /** An app with no product linked simply has nothing to offer. */
+    public function test_an_unlinked_app_has_no_derived_links(): void
+    {
+        $this->fawateer()->update(['product_id' => null, 'downloads' => null]);
+
+        $this->getJson('/api/fawateer/remote-config')
+            ->assertOk()
+            ->assertJsonPath('downloads', []);
     }
 
     // --- app-download, which used to disagree with this ------------------------
