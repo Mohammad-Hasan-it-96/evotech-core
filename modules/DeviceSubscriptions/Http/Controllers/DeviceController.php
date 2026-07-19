@@ -7,7 +7,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Modules\DeviceSubscriptions\Application\Services\DeviceSubscriptionService;
 
 /**
@@ -114,9 +113,7 @@ final class DeviceController
              * ever needed in-app it belongs on the authenticated
              * /api/v1/device/* twin, not here.
              */
-            'google_account' => $device->google_account
-                ? Str::mask($device->google_account, '•', 1, 4)
-                : null,
+            'google_account' => $device->maskedGoogleAccount(),
             'server_time' => Carbon::now()->toISOString(),
         ]);
     }

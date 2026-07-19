@@ -13,6 +13,7 @@ use Modules\DeviceSubscriptions\Domain\Models\DeviceApp;
 use Modules\DeviceSubscriptions\Domain\Models\DevicePlan;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 use Modules\Users\Domain\Models\User;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -326,7 +327,7 @@ class DeviceSubscriptionApiTest extends TestCase
             'device_id' => 'dev-1',
         ])->assertOk();
 
-        $response->assertJsonPath('google_account', 's••••backups@gmail.com');
+        $response->assertJsonPath('google_account', 's••••••••••s@gmail.com');
 
         // The assertion that matters: the raw address must not appear anywhere in
         // the body, however the field is shaped.
@@ -334,6 +335,51 @@ class DeviceSubscriptionApiTest extends TestCase
             'sara.backups@gmail.com',
             $response->getContent() ?: '',
         );
+
+        // Nor may the local part survive in any recoverable form — the first
+        // mask attempt kept "backups" intact, which is most of the address.
+        $this->assertStringNotContainsString('backups', $response->getContent() ?: '');
+    }
+
+    /**
+     * The mask must not degrade on inputs that are short, unusual, or not
+     * address-shaped — those are exactly where a length-based mask leaks.
+     */
+    #[DataProvider('googleAccountMaskCases')]
+    public function test_the_mask_hides_the_local_part(string $stored, string $expected): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => $stored,
+        ]);
+
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => 'dev-1'])
+            ->assertOk()
+            ->assertJsonPath('google_account', $expected);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function googleAccountMaskCases(): array
+    {
+        return [
+            'long local part' => [
+                'mohamad.hasan.it.96@gmail.com',
+                'm•••••••••••••••••6@gmail.com',
+            ],
+            'short local part keeps an initial' => ['abc@gmail.com', 'a•c@gmail.com'],
+            // Two characters or fewer cannot show an initial without showing most
+            // of it, so nothing is shown.
+            'two characters are hidden entirely' => ['ab@gmail.com', '••@gmail.com'],
+            'one character is hidden entirely' => ['a@gmail.com', '•@gmail.com'],
+            // A custom domain still reveals the organisation — the known residual.
+            'custom domain' => ['owner@pharmacy.example', 'o•••r@pharmacy.example'],
+            // Validation should stop this reaching storage; if it ever does, the
+            // public surface must hide more, not less.
+            'not address shaped' => ['notanemail', 'n•••••••••'],
+        ];
     }
 
     public function test_check_device_returns_null_when_no_google_account_is_set(): void
