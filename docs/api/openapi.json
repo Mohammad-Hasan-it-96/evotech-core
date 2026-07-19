@@ -3529,6 +3529,297 @@
                 }
             }
         },
+        "/v1/device-apps": {
+            "get": {
+                "operationId": "v1.device-apps.index",
+                "tags": [
+                    "DeviceCatalog"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `DeviceAppResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/DeviceAppResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/device-apps/{deviceApp}": {
+            "patch": {
+                "operationId": "v1.device-apps.update",
+                "tags": [
+                    "DeviceCatalog"
+                ],
+                "parameters": [
+                    {
+                        "name": "deviceApp",
+                        "in": "path",
+                        "required": true,
+                        "description": "The device app UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateDeviceAppRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`DeviceAppResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeviceAppResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/v1/device-plans": {
+            "get": {
+                "operationId": "v1.device-plans.index",
+                "description": "Disabled plans are included \u2014 this is the editor, and a disabled plan is\nexactly the thing an operator needs to see in order to re-enable it.",
+                "summary": "The catalog for one scope. `?app=<uuid>` lists that app's own plans; omitting\nit lists the shared catalog",
+                "tags": [
+                    "DeviceCatalog"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `DevicePlanResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/DevicePlanResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "v1.device-plans.store",
+                "tags": [
+                    "DeviceCatalog"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreDevicePlanRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`DevicePlanResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DevicePlanResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/device-plans/{devicePlan}": {
+            "patch": {
+                "operationId": "v1.device-plans.update",
+                "tags": [
+                    "DeviceCatalog"
+                ],
+                "parameters": [
+                    {
+                        "name": "devicePlan",
+                        "in": "path",
+                        "required": true,
+                        "description": "The device plan UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateDevicePlanRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`DevicePlanResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DevicePlanResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "v1.device-plans.destroy",
+                "description": "The difference is that a forced device delete has a visible, explainable\nconsequence the operator is warned about, while this one is silent and\ndeferred: nothing breaks today, and then a renewal weeks later grants a\n0-month term to someone who has just paid. Disabling the plan achieves the\noperator's actual goal \u2014 off the store, still resolvable \u2014 so there is no\nlegitimate case for the destructive version.",
+                "summary": "Deleting a plan that devices hold is refused outright \u2014 no `force` escape\nhatch, unlike deleting a device",
+                "tags": [
+                    "DeviceCatalog"
+                ],
+                "parameters": [
+                    {
+                        "name": "devicePlan",
+                        "in": "path",
+                        "required": true,
+                        "description": "The device plan UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {}
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
         "/v1/downloads/events": {
             "get": {
                 "operationId": "v1.downloads.events.index",
@@ -7170,6 +7461,104 @@
                 ],
                 "title": "DeactivateProductLicenseRequest"
             },
+            "DeviceAppResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "`name` and `slug` are shown but are not editable (see\nUpdateDeviceAppRequest). Surfacing them read-only is the point: an\noperator needs to see which app a row is before changing its price,\nand `name` is the exact string the shipped builds send."
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "trial_days": {
+                        "type": "integer"
+                    },
+                    "uses_shared_plans": {
+                        "type": "boolean"
+                    },
+                    "plans_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "label",
+                    "trial_days",
+                    "uses_shared_plans"
+                ],
+                "title": "DeviceAppResource"
+            },
+            "DevicePlanResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Two identifiers, and confusing them is a live hazard: id  \u2014 the uuid, addresses this row for editing.\nkey \u2014 the plan_key, what the app sends back and what\ndevice_subscriptions.plan_id stores.\n\nThe activate dialog must send `key`, never `id`: an id the device's\ncatalog does not define resolves to a 0-month term."
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "app_id": {
+                        "type": "string"
+                    },
+                    "is_shared": {
+                        "type": "boolean"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "duration_months": {
+                        "type": "integer"
+                    },
+                    "price": {
+                        "type": "number"
+                    },
+                    "price_after_discount": {
+                        "type": [
+                            "number",
+                            "null"
+                        ]
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "recommended": {
+                        "type": "boolean"
+                    },
+                    "sort_order": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id",
+                    "key",
+                    "is_shared",
+                    "title",
+                    "description",
+                    "duration_months",
+                    "price",
+                    "price_after_discount",
+                    "enabled",
+                    "recommended",
+                    "sort_order"
+                ],
+                "title": "DevicePlanResource"
+            },
             "DeviceSubscription": {
                 "type": "object",
                 "properties": {
@@ -8425,6 +8814,72 @@
                 ],
                 "title": "StoreCustomerRequest"
             },
+            "StoreDevicePlanRequest": {
+                "type": "object",
+                "properties": {
+                    "app": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Omitted / null = the shared catalog served by the un-namespaced\n/api/getPlans, which carries no app_name."
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "The identifier the app sends back and device rows store. Constrained\nto a conservative charset because it travels through URLs and JSON\nwritten by parsers we cannot update remotely. Uniqueness within the scope is enforced in the controller: the shared\nscope is `device_app_id IS NULL`, and SQL treats NULLs as distinct,\nso the table's unique index cannot see a duplicate there.",
+                        "pattern": "^[a-z0-9_]+$",
+                        "maxLength": 50
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 150
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 1000
+                    },
+                    "duration_months": {
+                        "type": "integer",
+                        "description": "Minimum 1. A 0-month plan is not a free tier \u2014 activation adds the\nduration to today, so it sells a subscription that has already\nexpired at the moment it is granted.",
+                        "minimum": 1,
+                        "maximum": 120
+                    },
+                    "price": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 99999999
+                    },
+                    "price_after_discount": {
+                        "type": [
+                            "number",
+                            "null"
+                        ],
+                        "description": "A \"discount\" above the price would display as an increase in the app.",
+                        "minimum": 0
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "recommended": {
+                        "type": "boolean"
+                    },
+                    "sort_order": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9999
+                    }
+                },
+                "required": [
+                    "key",
+                    "title",
+                    "duration_months",
+                    "price"
+                ],
+                "title": "StoreDevicePlanRequest"
+            },
             "StoreProductApiKeyRequest": {
                 "type": "object",
                 "properties": {
@@ -8703,6 +9158,77 @@
                     }
                 },
                 "title": "UpdateCustomerRequest"
+            },
+            "UpdateDeviceAppRequest": {
+                "type": "object",
+                "properties": {
+                    "label": {
+                        "type": "string",
+                        "maxLength": 100
+                    },
+                    "trial_days": {
+                        "type": "integer",
+                        "description": "0 = no trial. SmartAgent is deliberately 0; raising it grants trials\nto an app whose owner never asked for them.",
+                        "minimum": 0,
+                        "maximum": 365
+                    },
+                    "uses_shared_plans": {
+                        "type": "boolean"
+                    },
+                    "product": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The Products-module row this app's releases belong to. Null unlinks."
+                    }
+                },
+                "title": "UpdateDeviceAppRequest"
+            },
+            "UpdateDevicePlanRequest": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 150
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 1000
+                    },
+                    "duration_months": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 120
+                    },
+                    "price": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 99999999
+                    },
+                    "price_after_discount": {
+                        "type": [
+                            "number",
+                            "null"
+                        ],
+                        "minimum": 0
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "recommended": {
+                        "type": "boolean"
+                    },
+                    "sort_order": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9999
+                    }
+                },
+                "title": "UpdateDevicePlanRequest"
             },
             "UpdateReleaseRequest": {
                 "type": "object",

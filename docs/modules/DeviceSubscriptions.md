@@ -65,6 +65,18 @@ at `evotech-web` `/dashboard/devices`:
 | GET | `/api/v1/device-subscriptions/plans` | The catalog to activate against — the same one the apps see, so an operator cannot pick a plan id the device would not recognise. |
 | POST | `/api/v1/device-subscriptions/{deviceSubscription}/activate` | Activate/extend. **Closes the pending request** (`status → null`); `requested_plan` is kept, since the operator may sell a different plan. |
 | POST | `/api/v1/device-subscriptions/{deviceSubscription}/decline` | Reject the request (`status → declined`). **Touches nothing else** — a device holding a trial or a paid plan keeps it. 422 unless a request is actually open. |
+| DELETE | `/api/v1/device-subscriptions/{deviceSubscription}` | Remove a row. 422 for a device that still has access unless `?force=true`. |
+
+The catalog editor behind `/dashboard/plans`:
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/device-apps` | Every app with its terms and plan count. |
+| PATCH | `/api/v1/device-apps/{deviceApp}` | `label`, `trial_days`, `uses_shared_plans`, `product`. **`name`/`slug` are not accepted.** |
+| GET | `/api/v1/device-plans` | One scope: `?app=<uuid>` for that app's own plans, omitted for the shared catalog. **Includes disabled plans** — unlike `device-subscriptions/plans`, which mirrors what the device sees. |
+| POST | `/api/v1/device-plans` | `key` must be unique within its scope. `duration_months` ≥ 1; a 0-month plan expires the moment it is sold. |
+| PATCH | `/api/v1/device-plans/{devicePlan}` | **`key` and `app` are not accepted** — both would orphan existing holders. |
+| DELETE | `/api/v1/device-plans/{devicePlan}` | 422 when any device holds the plan, naming the count. **No `force` flag**: unlike a device delete the damage is silent and deferred, and disabling achieves the operator's actual goal. |
 
 ### The purchase-intent lifecycle
 
@@ -89,17 +101,37 @@ is in conversation with them anyway.
 
 ## Plans
 
-Static in `config/device-subscriptions.php` (`half_year` — 6 months, $12; `yearly` — 12 months,
-$20, recommended), preserving the exact `getPlans` payload. Prices change via config, no deploy.
+Stored in **`device_plans`** and edited from the dashboard (`/dashboard/plans`) — they began as a
+literal array in `config/device-subscriptions.php` and were migrated out verbatim (`half_year` —
+6 months, $12; `yearly` — 12 months, $20, recommended). Prices change with **no deploy at all**.
+The `getPlans` payload shape is unchanged and pinned in `DevicePlan::toLegacyArray()`.
+
+**`plan_key` is a contract, not a label.** Device rows store it in `plan_id` and renewal resolves
+a term by matching it, so it is immutable after creation and a referenced plan cannot be deleted
+(the API refuses with a 422 naming the subscriber count). Retiring a price means **disabling** the
+plan: hidden from the store, still resolvable for existing holders. Re-keying or deleting one
+would turn a paying customer's next renewal into a 0-month term — expired the moment it is
+granted.
+
+`config` remains as the **fallback** when the tables are empty or unmigrated, so the apps keep
+selling through a deploy window and an accidentally-emptied catalog degrades to the last
+known-good prices rather than offering nothing. The catalog is cached (`DeviceCatalogStore`,
+300 s) and flushed on every write, so an operator's edit is live on the next device poll.
 
 **Per-app catalogs.** `getPlans` is the one device endpoint carrying no `app_name`, so on the
 shared `/api/*` surface it cannot tell the apps apart. The whole shim is therefore also served
-under **`/api/{slug}/*`** (`apps.<App>.slug`) from one route definition; pointing an app's
+under **`/api/{slug}/*`** (`device_apps.slug`) from one route definition; pointing an app's
 remote-config `baseUrl` at `…/api/fawateer` namespaces every call it makes, with **no store
-release**. Set `apps.<App>.plans` to give that app its own catalog — omit it and it reads the
-shared list (what both apps do today). An unknown slug serves the shared catalog rather than
-erroring, so a typo'd base URL degrades to current behaviour. `{app}` excludes version segments
-(`v1`, `v2`…), so the namespace can never shadow the platform API.
+release**. Clear an app's `uses_shared_plans` to give it its own catalog — leave it set and it
+reads the shared list (what both apps do today). That flag is deliberate rather than inferred
+from "has no plan rows": *defers to shared* and *sells nothing* are different answers, and
+collapsing them would hand an app the wrong prices. An unknown slug serves the shared catalog
+rather than erroring, so a typo'd base URL degrades to current behaviour. `{app}` excludes
+version segments (`v1`, `v2`…), so the namespace can never shadow the platform API.
+
+`device_apps.name` and `.slug` are **immutable** — `name` is the literal string shipped builds
+send and every row is matched on it; `slug` is the base URL they are pointed at. Neither is
+recoverable from the dashboard, so neither is offered there.
 
 Activation resolves a plan's term in **the device's own** app catalog — the same id may mean a
 different number of months per app.
@@ -107,15 +139,19 @@ different number of months per app.
 ## Per-app settings & the free trial
 
 One deployment serves several shipped apps, told apart only by the `app_name` they send.
-They do **not** share policy — `config('device-subscriptions.apps')` keys settings per app
-(case-insensitive):
+They do **not** share policy — **`device_apps`** keys settings per app (matched
+case-insensitively), editable from the dashboard:
 
 | App | `trial_days` | `label` |
 |---|---|---|
 | `Fawateer` | 30 | فواتير |
 | `SmartAgent` | 0 (none) | المندوب الذكي |
 
-An app absent from the map gets **no trial** and falls back to its raw `app_name` as the label.
+Firebase credentials stay in **config** and are deliberately *not* part of the editable catalog:
+the value is a path to a service-account private key, which has no business being writable from a
+browser session or readable out of the database.
+
+An app absent from the table gets **no trial** and falls back to its raw `app_name` as the label.
 The trial is Fawateer's design; granting it platform-wide would silently change SmartAgent's
 monetization.
 
@@ -134,7 +170,10 @@ activation converts it by setting `plan_id`, which ends the trial by definition;
 | `Domain\Models\DeviceSubscription` | `HasUuid` route key; **no** tenancy. `isActive()` = verified **and** unexpired. `isOnTrial()` = has a `trial_expires_at`, no `plan_id` yet, still active — so activation ends the trial by setting `plan_id`, with no flag to rewrite. `scopeForDevice()`. |
 | `Domain\Enums\DevicePlan` | `half_year` / `yearly` + `durationMonths()`. |
 | `Application\Services\DeviceSubscriptionService` | register/check/update/review/activate/decline/list + `sweepExpiryReminders()`. Emits `DeviceActivated`. |
-| `Application\Services\DevicePlanCatalog` | read model over the config plans. |
+| `Domain\Models\DeviceApp` / `DevicePlan` | the editable catalog. `DevicePlan::toLegacyArray()` pins the `getPlans` shape, including emitting a whole price as an int (`12`, not `12.0`) — the shipped parsers were written against integer prices and cannot be updated remotely. |
+| `Application\Services\DevicePlanCatalog` | read model over the plan catalog. |
+| `Application\Services\DeviceCatalogStore` | loads + caches the catalog; falls back to config when the tables are empty/unmigrated. |
+| `Application\Services\DeviceCatalogService` | catalog writes, audit trail, cache flush, and the delete guard (`subscriberCount()`). |
 | `Domain\Contracts\DevicePushNotifier` | push abstraction; `NullPushNotifier` (safe default), `FirebasePushNotifier` (FCM HTTP v1 — set `DEVICE_PUSH_NOTIFIER=firebase`). |
 | `Console\SweepDeviceExpiryCommand` | `device-subscriptions:sweep-expiry` — **scheduled daily**; sends expiry pushes at expired/7/3/1 days (replaces the legacy cron endpoint). |
 | `Console\ImportLegacyDevicesCommand` | `device-subscriptions:import-legacy` — one-off, re-runnable import of `app_harfoshs` from a separate DB connection (`DEVICE_LEGACY_CONNECTION`); `--dry-run` supported. |
