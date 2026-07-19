@@ -27,22 +27,46 @@ return new class extends Migration
             $table->string('variant', 32)->default('')->after('platform');
         });
 
+        /*
+         * Add the new index BEFORE dropping the old one, and not for tidiness.
+         *
+         * MySQL requires an index whose leftmost column is the foreign key, and
+         * `artifacts_release_id_platform_unique` was serving that role for
+         * `release_id`. Dropping it first leaves the FK unindexed and MySQL
+         * refuses outright:
+         *
+         *   1553 Cannot drop index '…': needed in a foreign key constraint
+         *
+         * The new index also starts with `release_id`, so once it exists the old
+         * one is free to go. SQLite does not care either way — which is why this
+         * only showed up on the MySQL half of CI.
+         */
         Schema::table('artifacts', function (Blueprint $table): void {
-            // Two steps: the column has to exist before an index can name it.
-            $table->dropUnique(['release_id', 'platform']);
             $table->unique(['release_id', 'platform', 'variant']);
+        });
+
+        Schema::table('artifacts', function (Blueprint $table): void {
+            $table->dropUnique(['release_id', 'platform']);
         });
     }
 
     public function down(): void
     {
+        // Same ordering constraint in reverse: the FK needs an index throughout.
+        //
+        // This fails if any release actually holds two variants of one platform —
+        // correctly, since the old shape cannot represent them. Drop the extra
+        // artifacts first if a rollback is ever genuinely needed.
+        Schema::table('artifacts', function (Blueprint $table): void {
+            $table->unique(['release_id', 'platform']);
+        });
+
         Schema::table('artifacts', function (Blueprint $table): void {
             $table->dropUnique(['release_id', 'platform', 'variant']);
         });
 
         Schema::table('artifacts', function (Blueprint $table): void {
             $table->dropColumn('variant');
-            $table->unique(['release_id', 'platform']);
         });
     }
 };
