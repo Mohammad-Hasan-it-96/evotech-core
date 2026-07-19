@@ -18,26 +18,53 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "",
+                        "description": "The un-namespaced surface cannot tell which app is asking, so it keeps\nanswering from config. Unset by default, which is the honest answer:\nthere is no single \"latest version\" across several products.",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean"
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "success": {
+                                                    "type": "boolean"
+                                                },
+                                                "latest_version": {
+                                                    "type": "string"
+                                                },
+                                                "downloads": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "success",
+                                                "latest_version",
+                                                "downloads"
+                                            ]
                                         },
-                                        "latest_version": {
-                                            "type": "string"
-                                        },
-                                        "downloads": {
-                                            "type": "string"
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "success": {
+                                                    "type": "boolean"
+                                                },
+                                                "latest_version": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "downloads": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                }
+                                            },
+                                            "required": [
+                                                "success",
+                                                "latest_version",
+                                                "downloads"
+                                            ]
                                         }
-                                    },
-                                    "required": [
-                                        "success",
-                                        "latest_version",
-                                        "downloads"
                                     ]
                                 }
                             }
@@ -58,6 +85,83 @@
                         "in": "path",
                         "required": true,
                         "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "default": null
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The un-namespaced surface cannot tell which app is asking, so it keeps\nanswering from config. Unset by default, which is the honest answer:\nthere is no single \"latest version\" across several products.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "success": {
+                                                    "type": "boolean"
+                                                },
+                                                "latest_version": {
+                                                    "type": "string"
+                                                },
+                                                "downloads": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "success",
+                                                "latest_version",
+                                                "downloads"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "success": {
+                                                    "type": "boolean"
+                                                },
+                                                "latest_version": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "downloads": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                }
+                                            },
+                                            "required": [
+                                                "success",
+                                                "latest_version",
+                                                "downloads"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{app}/remote-config": {
+            "get": {
+                "operationId": "device.remote-config",
+                "tags": [
+                    "AppRemoteConfig"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
                             "type": "string"
                         }
                     }
@@ -70,20 +174,76 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "success": {
-                                            "type": "boolean"
-                                        },
                                         "latest_version": {
-                                            "type": "string"
+                                            "type": "string",
+                                            "description": "Compared component-wise as integers, so \"\" simply disables the update\ncheck. Constrained to digits and dots at the request layer."
+                                        },
+                                        "api": {
+                                            "type": "object",
+                                            "properties": {
+                                                "base_url": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "base_url"
+                                            ]
                                         },
                                         "downloads": {
-                                            "type": "string"
+                                            "type": "array",
+                                            "description": "ABI => URL. Keys are matched exactly against the device's reported\nABI, so a typo is an update the device can never find.",
+                                            "items": {}
+                                        },
+                                        "update_notes": {
+                                            "type": "array",
+                                            "description": "Must be a list of strings: Fawateer's parser drops a bare string\noutright, and an object would render as nothing.",
+                                            "items": {}
+                                        },
+                                        "support": {
+                                            "type": "object",
+                                            "properties": {
+                                                "email": {
+                                                    "type": "string"
+                                                },
+                                                "whatsapp": {
+                                                    "type": "string"
+                                                },
+                                                "telegram": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "email",
+                                                "whatsapp",
+                                                "telegram"
+                                            ]
                                         }
                                     },
                                     "required": [
-                                        "success",
                                         "latest_version",
-                                        "downloads"
+                                        "api",
+                                        "downloads",
+                                        "update_notes",
+                                        "support"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Unknown app."
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
                                     ]
                                 }
                             }
@@ -7485,6 +7645,52 @@
                     },
                     "plans_count": {
                         "type": "integer"
+                    },
+                    "latest_version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Remote config \u2014 what the app fetches at startup."
+                    },
+                    "api_base_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "downloads": {
+                        "anyOf": [
+                            {
+                                "type": "array",
+                                "items": {}
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    },
+                    "update_notes": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "support_email": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "support_whatsapp": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "support_telegram": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 },
                 "required": [
@@ -7493,7 +7699,14 @@
                     "slug",
                     "label",
                     "trial_days",
-                    "uses_shared_plans"
+                    "uses_shared_plans",
+                    "latest_version",
+                    "api_base_url",
+                    "downloads",
+                    "update_notes",
+                    "support_email",
+                    "support_whatsapp",
+                    "support_telegram"
                 ],
                 "title": "DeviceAppResource"
             },
@@ -9181,6 +9394,69 @@
                             "null"
                         ],
                         "description": "The Products-module row this app's releases belong to. Null unlinks."
+                    },
+                    "latest_version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Remote config \u2014 what the app fetches at startup. Both shipped apps compare this component-wise as integers, NOT as\nsemver: `int.tryParse(part) ?? 0`. So \"1.2.0-beta\" compares that\ncomponent as 0 and an update can become permanently invisible with no\nerror anywhere. Digits and dots only.",
+                        "pattern": "^\\d+(\\.\\d+)*$",
+                        "maxLength": 20
+                    },
+                    "api_base_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 255
+                    },
+                    "support_email": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "email",
+                        "maxLength": 150
+                    },
+                    "support_whatsapp": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 30
+                    },
+                    "support_telegram": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 150
+                    },
+                    "downloads": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "ABI => APK URL. Keys are matched *exactly* against the ABI the device\nreports, so an unrecognised key is not a validation nicety \u2014 it is an\nupdate the device can never find. `default` is included because\nSmartAgent falls back to it for any ABI it cannot classify.",
+                        "items": {
+                            "type": "string",
+                            "format": "uri",
+                            "maxLength": 500
+                        }
+                    },
+                    "update_notes": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string",
+                            "description": "Strings only: a nested value reaches the app as \"Instance of ...\"\nonce its parser calls toString, and a bare string is dropped.",
+                            "maxLength": 200
+                        },
+                        "maxItems": 20
                     }
                 },
                 "title": "UpdateDeviceAppRequest"

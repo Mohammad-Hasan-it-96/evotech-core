@@ -22,6 +22,13 @@ use Modules\Core\Domain\Concerns\HasUuid;
  * @property int $trial_days
  * @property bool $uses_shared_plans
  * @property int|null $product_id
+ * @property string|null $latest_version
+ * @property string|null $api_base_url
+ * @property array<string, mixed>|null $downloads
+ * @property array<int, mixed>|null $update_notes
+ * @property string|null $support_email
+ * @property string|null $support_whatsapp
+ * @property string|null $support_telegram
  */
 class DeviceApp extends Model
 {
@@ -34,6 +41,13 @@ class DeviceApp extends Model
         'trial_days',
         'uses_shared_plans',
         'product_id',
+        'latest_version',
+        'api_base_url',
+        'downloads',
+        'update_notes',
+        'support_email',
+        'support_whatsapp',
+        'support_telegram',
     ];
 
     protected function casts(): array
@@ -41,6 +55,8 @@ class DeviceApp extends Model
         return [
             'trial_days' => 'int',
             'uses_shared_plans' => 'bool',
+            'downloads' => 'array',
+            'update_notes' => 'array',
         ];
     }
 

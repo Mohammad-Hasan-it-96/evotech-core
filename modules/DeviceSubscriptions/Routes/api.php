@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\DeviceSubscriptions\Http\Controllers\AppDownloadController;
+use Modules\DeviceSubscriptions\Http\Controllers\AppRemoteConfigController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceAdminController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceCatalogController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceController;
@@ -68,6 +69,18 @@ Route::prefix('api')->group($legacyEndpoints);
 Route::prefix('api/{app}')
     ->where(['app' => '(?!v\d)[a-z][a-z0-9_-]*'])
     ->group($legacyEndpoints);
+
+/*
+ * The startup remote-config, registered only under the namespaced prefix — it is
+ * per-app by definition, and the un-namespaced surface carries nothing that could
+ * identify which app is asking.
+ *
+ * Not part of $legacyEndpoints for that reason, and because it is new: no shipped
+ * build calls `/api/remote-config`, so there is no compatibility to preserve.
+ */
+Route::get('api/{app}/remote-config', AppRemoteConfigController::class)
+    ->where(['app' => '(?!v\d)[a-z][a-z0-9_-]*'])
+    ->name('api.device.remote-config');
 
 // 2. Versioned device API (auth:product) ------------------------------------------
 Route::prefix('api/v1/device')
