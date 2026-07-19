@@ -16,6 +16,29 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Apply the "api" rate limiter (AppServiceProvider) to the api group (§6.13).
         $middleware->throttleApi();
+
+        /*
+         * Answer unauthenticated API requests with 401, not 500.
+         *
+         * `Authenticate::redirectTo()` calls `route('login')` *eagerly*, before the
+         * AuthenticationException is constructed. This repo is API-only and has no
+         * such route, so that call threw RouteNotFoundException — which reached
+         * ApiExceptionRenderer as an unknown error and became a 500. The renderer
+         * was never given an auth exception to recognise.
+         *
+         * It only bit requests that do not send `Accept: application/json`, which
+         * is why the dashboard never saw it and a browser or a bare curl always
+         * did — the worst shape for a bug, since the clients most likely to hit it
+         * are the ones least able to explain it.
+         *
+         * Returning null leaves the exception intact for the renderer. Non-API
+         * requests get `/` rather than null: nothing under `web` is authenticated
+         * today, but a null there would fall back to `route('login')` and
+         * reintroduce exactly this 500.
+         */
+        $middleware->redirectGuestsTo(
+            fn (Request $request): ?string => $request->is('api/*') ? null : '/',
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Render the standard API error envelope for API requests (§7).
