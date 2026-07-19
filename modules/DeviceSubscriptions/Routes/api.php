@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\DeviceSubscriptions\Http\Controllers\AppDownloadController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceAdminController;
+use Modules\DeviceSubscriptions\Http\Controllers\DeviceCatalogController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceController;
 use Modules\DeviceSubscriptions\Http\Controllers\PlanController;
 
@@ -95,4 +96,24 @@ Route::prefix('api/v1')
             ->name('device-subscriptions.decline');
         Route::delete('device-subscriptions/{deviceSubscription}', [DeviceAdminController::class, 'destroyV1'])
             ->name('device-subscriptions.destroy');
+
+        /*
+         * Catalog editor. Note these sit alongside `device-subscriptions/plans`,
+         * which is a different thing and stays: that one serves the legacy-shaped
+         * list the activate dialog picks from, matching exactly what the device
+         * sees. These are the admin views — disabled plans included, writable.
+         */
+        Route::get('device-apps', [DeviceCatalogController::class, 'apps'])
+            ->name('device-apps.index');
+        Route::patch('device-apps/{deviceApp}', [DeviceCatalogController::class, 'updateApp'])
+            ->name('device-apps.update');
+
+        Route::get('device-plans', [DeviceCatalogController::class, 'plans'])
+            ->name('device-plans.index');
+        Route::post('device-plans', [DeviceCatalogController::class, 'storePlan'])
+            ->name('device-plans.store');
+        Route::patch('device-plans/{devicePlan}', [DeviceCatalogController::class, 'updatePlan'])
+            ->name('device-plans.update');
+        Route::delete('device-plans/{devicePlan}', [DeviceCatalogController::class, 'destroyPlan'])
+            ->name('device-plans.destroy');
     });

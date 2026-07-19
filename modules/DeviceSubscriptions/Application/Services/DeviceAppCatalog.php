@@ -3,16 +3,23 @@
 namespace Modules\DeviceSubscriptions\Application\Services;
 
 /**
- * Read model over the per-app settings in config('device-subscriptions.apps').
+ * Read model over the per-app settings, now stored in `device_apps` and editable
+ * from the dashboard (config is the fallback — see DeviceCatalogStore).
  *
  * One deployment serves several shipped apps, told apart only by the `app_name`
  * they send, and they do NOT share policy: Fawateer grants a 30-day trial,
  * SmartAgent grants none. Lookups are case-insensitive, and an unknown app gets
  * the conservative default (no trial, its own name as the label) rather than
  * inheriting another app's terms.
+ *
+ * Firebase credentials stay in config deliberately and are NOT part of the editable
+ * catalog: the value is a path to a service-account private key, which has no
+ * business being writable from a browser session or readable out of a database.
  */
 final class DeviceAppCatalog
 {
+    public function __construct(private readonly DeviceCatalogStore $store) {}
+
     /** Free-trial length for an app; 0 (the default) means no trial. */
     public function trialDays(string $appName): int
     {
@@ -56,7 +63,20 @@ final class DeviceAppCatalog
      */
     public function firebase(string $appName): ?array
     {
-        $firebase = $this->settings($appName)['firebase'] ?? null;
+        $apps = config('device-subscriptions.apps', []);
+
+        if (! is_array($apps)) {
+            return null;
+        }
+
+        $firebase = null;
+
+        foreach ($apps as $name => $settings) {
+            if (is_string($name) && strcasecmp($name, $appName) === 0 && is_array($settings)) {
+                $firebase = $settings['firebase'] ?? null;
+                break;
+            }
+        }
 
         if (! is_array($firebase)) {
             return null;
@@ -85,20 +105,11 @@ final class DeviceAppCatalog
      */
     public function appForSlug(string $slug): ?string
     {
-        $apps = config('device-subscriptions.apps', []);
+        foreach ($this->store->snapshot()['apps'] as $app) {
+            $appSlug = $app['slug'] ?? null;
+            $name = $app['name'] ?? null;
 
-        if (! is_array($apps)) {
-            return null;
-        }
-
-        foreach ($apps as $name => $settings) {
-            if (! is_string($name) || ! is_array($settings)) {
-                continue;
-            }
-
-            $appSlug = $settings['slug'] ?? null;
-
-            if (is_string($appSlug) && strcasecmp($appSlug, $slug) === 0) {
+            if (is_string($appSlug) && is_string($name) && strcasecmp($appSlug, $slug) === 0) {
                 return $name;
             }
         }
@@ -111,15 +122,11 @@ final class DeviceAppCatalog
      */
     private function settings(string $appName): array
     {
-        $apps = config('device-subscriptions.apps', []);
+        foreach ($this->store->snapshot()['apps'] as $app) {
+            $name = $app['name'] ?? null;
 
-        if (! is_array($apps)) {
-            return [];
-        }
-
-        foreach ($apps as $name => $settings) {
-            if (is_string($name) && strcasecmp($name, $appName) === 0 && is_array($settings)) {
-                return $settings;
+            if (is_string($name) && strcasecmp($name, $appName) === 0) {
+                return $app;
             }
         }
 

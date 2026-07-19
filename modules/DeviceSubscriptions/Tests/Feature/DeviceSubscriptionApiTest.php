@@ -8,6 +8,9 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Laravel\Sanctum\Sanctum;
 use Modules\Core\Domain\Contracts\AuditLogger;
+use Modules\DeviceSubscriptions\Application\Services\DeviceCatalogStore;
+use Modules\DeviceSubscriptions\Domain\Models\DeviceApp;
+use Modules\DeviceSubscriptions\Domain\Models\DevicePlan;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 use Modules\Users\Domain\Models\User;
 use Tests\TestCase;
@@ -23,6 +26,38 @@ class DeviceSubscriptionApiTest extends TestCase
     private function actAsStaff(): void
     {
         Sanctum::actingAs(User::factory()->create(), ['*']);
+    }
+
+    /**
+     * Give an app a catalog of its own, overriding the shared list.
+     *
+     * Writes rows rather than setting config: the catalog moved into the database
+     * and config is only the empty-table fallback, so a config override here would
+     * assert against a source production never reads.
+     *
+     * @param  array<int, array<string, mixed>>  $plans
+     */
+    private function giveAppOwnPlans(string $appName, array $plans): void
+    {
+        $app = DeviceApp::query()->where('name', $appName)->sole();
+        $app->update(['uses_shared_plans' => false]);
+
+        foreach ($plans as $index => $plan) {
+            DevicePlan::create([
+                'device_app_id' => $app->id,
+                'plan_key' => $plan['id'],
+                'title' => $plan['title'],
+                'description' => $plan['description'] ?? null,
+                'duration_months' => $plan['duration_months'],
+                'price' => $plan['price'],
+                'price_after_discount' => $plan['price_after_discount'] ?? null,
+                'enabled' => $plan['enabled'] ?? true,
+                'recommended' => $plan['recommended'] ?? false,
+                'sort_order' => $index,
+            ]);
+        }
+
+        app(DeviceCatalogStore::class)->flush();
     }
 
     public function test_create_device_registers_a_new_device_unverified(): void
@@ -933,7 +968,7 @@ class DeviceSubscriptionApiTest extends TestCase
      */
     public function test_namespaced_get_plans_serves_the_apps_own_catalog(): void
     {
-        config()->set('device-subscriptions.apps.Fawateer.plans', [
+        $this->giveAppOwnPlans('Fawateer', [
             ['id' => 'monthly', 'title' => 'شهري', 'duration_months' => 1, 'price' => 19,
                 'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
         ]);
@@ -1002,7 +1037,7 @@ class DeviceSubscriptionApiTest extends TestCase
      */
     public function test_activation_uses_the_devices_own_app_catalog(): void
     {
-        config()->set('device-subscriptions.apps.Fawateer.plans', [
+        $this->giveAppOwnPlans('Fawateer', [
             ['id' => 'yearly', 'title' => 'سنوي', 'duration_months' => 1, 'price' => 19,
                 'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
         ]);
@@ -1027,7 +1062,7 @@ class DeviceSubscriptionApiTest extends TestCase
     /** The console asks for the catalog of the app it is activating. */
     public function test_staff_plan_catalog_can_be_scoped_to_an_app(): void
     {
-        config()->set('device-subscriptions.apps.Fawateer.plans', [
+        $this->giveAppOwnPlans('Fawateer', [
             ['id' => 'monthly', 'title' => 'شهري', 'duration_months' => 1, 'price' => 19,
                 'price_after_discount' => null, 'enabled' => true, 'recommended' => false, 'description' => ''],
         ]);

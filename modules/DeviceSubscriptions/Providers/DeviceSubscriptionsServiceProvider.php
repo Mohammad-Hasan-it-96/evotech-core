@@ -3,6 +3,7 @@
 namespace Modules\DeviceSubscriptions\Providers;
 
 use Modules\Core\Providers\BaseModuleServiceProvider;
+use Modules\DeviceSubscriptions\Application\Services\DeviceCatalogStore;
 use Modules\DeviceSubscriptions\Console\ImportLegacyDevicesCommand;
 use Modules\DeviceSubscriptions\Console\SweepDeviceExpiryCommand;
 use Modules\DeviceSubscriptions\Domain\Contracts\DevicePushNotifier;
@@ -25,6 +26,10 @@ final class DeviceSubscriptionsServiceProvider extends BaseModuleServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom($this->modulePath('Config/device-subscriptions.php'), 'device-subscriptions');
+
+        // Singleton so the per-request memo actually memoises: the catalog is read
+        // several times while serving one device poll (trial terms, label, plans).
+        $this->app->singleton(DeviceCatalogStore::class);
 
         // Safe default: a no-op notifier so the module never depends on Firebase
         // credentials to boot or test. Set DEVICE_PUSH_NOTIFIER=firebase in an

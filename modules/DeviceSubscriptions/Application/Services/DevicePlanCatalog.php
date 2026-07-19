@@ -3,9 +3,9 @@
 namespace Modules\DeviceSubscriptions\Application\Services;
 
 /**
- * Read model over the configured plans (config/device-subscriptions.php). Returns
- * the exact `getPlans` payload the shipped app expects and resolves a plan's
- * duration in months for activation.
+ * Read model over the plan catalog (`device_plans`, dashboard-editable; config is
+ * the fallback — see DeviceCatalogStore). Returns the exact `getPlans` payload the
+ * shipped app expects and resolves a plan's duration in months for activation.
  *
  * Plans resolve **per app** (Phase D): an app with its own `plans` list gets it,
  * anything else gets the shared list. Every lookup takes the app so a plan id is
@@ -15,7 +15,10 @@ namespace Modules\DeviceSubscriptions\Application\Services;
  */
 final class DevicePlanCatalog
 {
-    public function __construct(private readonly DeviceAppCatalog $apps) {}
+    public function __construct(
+        private readonly DeviceAppCatalog $apps,
+        private readonly DeviceCatalogStore $store,
+    ) {}
 
     /**
      * The full plans payload, currency included, matching the legacy response.
@@ -55,8 +58,8 @@ final class DevicePlanCatalog
     {
         $plans = $appName === null ? null : $this->apps->plans($appName);
 
-        $plans ??= config('device-subscriptions.plans', []);
+        $plans ??= $this->store->snapshot()['shared_plans'];
 
-        return is_array($plans) ? array_values($plans) : [];
+        return array_values($plans);
     }
 }
