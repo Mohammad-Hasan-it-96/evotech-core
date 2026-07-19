@@ -21,7 +21,7 @@ final class ReleaseDownloadUrlLocator implements ReleaseDownloadLocator
     public function __construct(private readonly DownloadService $downloads) {}
 
     /**
-     * @return array<string, string>
+     * @return array<int, array{platform: string, variant: string, url: string}>
      */
     public function latestDownloadUrls(string $productSlug, ?string $channel = null): array
     {
@@ -48,20 +48,29 @@ final class ReleaseDownloadUrlLocator implements ReleaseDownloadLocator
         $urls = [];
 
         foreach ($release->artifacts as $artifact) {
-            // Cast to the Platform enum on the model; the port's contract is a
-            // string-keyed map, so the backing value is what belongs here.
+            // Cast to the Platform enum on the model; the contract is strings, so
+            // the backing value is what belongs here.
             $platform = $artifact->platform->value;
+            $variant = $artifact->variant;
 
             /*
-             * Keyed by platform, and the URL deliberately does not name the
-             * artifact: it resolves to whatever is currently published, so a link
-             * already sitting in a cached config keeps working after the next
-             * release rather than pointing at the previous build forever.
+             * The URL deliberately does not name the artifact: it resolves to
+             * whatever is currently published, so a link already sitting in a
+             * cached config keeps working after the next release rather than
+             * pointing at the previous build forever.
              */
-            $urls[$platform] = route('api.v1.downloads.latest', [
-                'product' => $productSlug,
+            $parameters = ['product' => $productSlug, 'platform' => $platform];
+
+            // Omitted rather than empty: `…/android/` is not the universal URL.
+            if ($variant !== '') {
+                $parameters['variant'] = $variant;
+            }
+
+            $urls[] = [
                 'platform' => $platform,
-            ]);
+                'variant' => $variant,
+                'url' => route('api.v1.downloads.latest', $parameters),
+            ];
         }
 
         return $urls;

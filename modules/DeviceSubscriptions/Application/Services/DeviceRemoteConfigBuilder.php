@@ -79,13 +79,11 @@ final class DeviceRemoteConfigBuilder
      * an operator never chose and cannot see — half hand-set, half derived — and
      * the whole point of the manual field is overriding what publishing produces.
      *
-     * The derived map has a single `default` key, and that is a consequence of the
-     * schema rather than a shortcut: `artifacts` is unique on
-     * (release, platform), so a release holds exactly one Android build. There is
-     * no per-ABI split to derive. `default` is the right key for it — Fawateer
-     * falls back to the first non-empty value when no ABI matches, so one universal
-     * APK reaches every device. Genuinely split per-ABI builds stay a manual
-     * override until artifacts model variants.
+     * Android artifacts map onto the keys the apps actually look up: a build's
+     * `variant` *is* the ABI key (`arm64-v8a`), and a universal build becomes
+     * `default`, which is what both parsers fall back to when no ABI matches. Any
+     * other platform is dropped — this config is read by Android apps, and a
+     * `windows` key would be noise the parsers ignore.
      *
      * @return array<string, string>
      */
@@ -107,9 +105,19 @@ final class DeviceRemoteConfigBuilder
             return [];
         }
 
-        $android = $this->locator->latestDownloadUrls($slug)['android'] ?? null;
+        $derived = [];
 
-        return is_string($android) && $android !== '' ? ['default' => $android] : [];
+        foreach ($this->locator->latestDownloadUrls($slug) as $download) {
+            if ($download['platform'] !== 'android' || $download['url'] === '') {
+                continue;
+            }
+
+            $key = $download['variant'] === '' ? 'default' : $download['variant'];
+
+            $derived[$key] = $download['url'];
+        }
+
+        return $derived;
     }
 
     /**

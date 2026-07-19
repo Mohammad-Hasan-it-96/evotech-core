@@ -64,6 +64,26 @@ class PublicDownloadTest extends TestCase
         return $release->refresh();
     }
 
+    /** Adds another build of the same platform, distinguished by its ABI. */
+    private function addArtifact(Release $release, string $variant, string $content): Artifact
+    {
+        $path = UploadedFile::fake()
+            ->createWithContent("app-{$variant}.apk", $content)
+            ->store("artifacts/invoices/{$release->uuid}", 'downloads');
+
+        return Artifact::create([
+            'release_id' => $release->id,
+            'platform' => Platform::Android->value,
+            'variant' => $variant,
+            'disk' => 'downloads',
+            'path' => (string) $path,
+            'filename' => "app-{$variant}.apk",
+            'size' => mb_strlen($content),
+            'checksum_sha256' => str_repeat('d', 64),
+            'content_type' => 'application/vnd.android.package-archive',
+        ]);
+    }
+
     // --- The permanent URL ------------------------------------------------------
 
     public function test_the_public_url_redirects_to_the_current_build(): void
@@ -174,18 +194,96 @@ class PublicDownloadTest extends TestCase
 
     // --- The Core port ----------------------------------------------------------
 
-    public function test_the_locator_returns_permanent_urls_keyed_by_platform(): void
+    public function test_the_locator_returns_permanent_urls(): void
     {
         $this->publishedRelease();
 
         $urls = app(ReleaseDownloadLocator::class)->latestDownloadUrls('invoices');
 
-        $this->assertArrayHasKey('android', $urls);
-        $this->assertStringContainsString('/downloads/latest/invoices/android', $urls['android']);
+        $this->assertCount(1, $urls);
+        $this->assertSame('android', $urls[0]['platform']);
+        // Universal build: the caller turns an empty variant into `default`.
+        $this->assertSame('', $urls[0]['variant']);
+        $this->assertStringContainsString('/downloads/latest/invoices/android', $urls[0]['url']);
 
         // Not a signed link: it must still work long after it is written into a
         // config file that devices cache.
-        $this->assertStringNotContainsString('signature=', $urls['android']);
+        $this->assertStringNotContainsString('signature=', $urls[0]['url']);
+    }
+
+    // --- Per-ABI variants -------------------------------------------------------
+
+    /**
+     * The reason variants exist. Before this, `artifacts` was unique on
+     * (release, platform), so the second Android upload silently *replaced* the
+     * first instead of sitting beside it.
+     */
+    public function test_two_android_abis_coexist_in_one_release(): void
+    {
+        $release = $this->publishedRelease();
+
+        $this->addArtifact($release, 'arm64-v8a', 'ARM64-BYTES');
+        $this->addArtifact($release, 'armeabi-v7a', 'ARM32-BYTES');
+
+        // Three: the universal build from publishedRelease() plus both ABIs.
+        $this->assertSame(3, $release->artifacts()->count());
+
+        $arm64 = $this->get('/api/v1/downloads/latest/invoices/android/arm64-v8a');
+        $arm32 = $this->get('/api/v1/downloads/latest/invoices/android/armeabi-v7a');
+
+        $this->assertSame(
+            'ARM64-BYTES',
+            $this->get((string) $arm64->headers->get('Location'))->streamedContent(),
+        );
+        $this->assertSame(
+            'ARM32-BYTES',
+            $this->get((string) $arm32->headers->get('Location'))->streamedContent(),
+        );
+    }
+
+    /**
+     * Omitting the variant addresses the *universal* build specifically — it does
+     * not pick one of the ABIs. Guessing would mean handing an arm64 APK to an
+     * armeabi device: an install failure, with nothing explaining why.
+     */
+    public function test_omitting_the_variant_serves_the_universal_build(): void
+    {
+        $release = $this->publishedRelease();
+        $this->addArtifact($release, 'arm64-v8a', 'ARM64-BYTES');
+
+        $location = (string) $this->get('/api/v1/downloads/latest/invoices/android')
+            ->headers->get('Location');
+
+        $this->assertSame('APK-BYTES', $this->get($location)->streamedContent());
+    }
+
+    public function test_a_variant_with_no_build_is_a_404(): void
+    {
+        $this->publishedRelease();
+
+        $this->get('/api/v1/downloads/latest/invoices/android/armeabi-v7a')->assertNotFound();
+    }
+
+    /** Each ABI is addressed and counted separately. */
+    public function test_the_locator_lists_every_variant(): void
+    {
+        $release = $this->publishedRelease();
+        $this->addArtifact($release, 'arm64-v8a', 'ARM64-BYTES');
+        $this->addArtifact($release, 'armeabi-v7a', 'ARM32-BYTES');
+
+        $urls = app(ReleaseDownloadLocator::class)->latestDownloadUrls('invoices');
+
+        $byVariant = [];
+
+        foreach ($urls as $download) {
+            $byVariant[$download['variant']] = $download['url'];
+        }
+
+        $this->assertSame(['', 'arm64-v8a', 'armeabi-v7a'], array_keys($byVariant));
+
+        // The universal URL carries no trailing segment: `…/android/` is not it.
+        $this->assertStringEndsWith('/downloads/latest/invoices/android', $byVariant['']);
+        $this->assertStringEndsWith('/android/arm64-v8a', $byVariant['arm64-v8a']);
     }
 
     public function test_the_locator_is_empty_for_products_with_nothing_published(): void

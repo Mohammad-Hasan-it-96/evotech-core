@@ -56,7 +56,16 @@ Route::prefix('api/v1')
     ->name('api.v1.')
     ->middleware('throttle:30,1')
     ->group(function (): void {
-        Route::get('downloads/latest/{product}/{platform}', PublicDownloadController::class)
+        /*
+         * `{variant}` distinguishes builds of one platform (arm64-v8a vs
+         * armeabi-v7a). Omitted addresses the universal build — a distinct
+         * artifact, not "whichever exists".
+         *
+         * Constrained so the segment cannot swallow an unrelated path, and so a
+         * typo 404s here rather than resolving to some other build.
+         */
+        Route::get('downloads/latest/{product}/{platform}/{variant?}', PublicDownloadController::class)
+            ->where(['variant' => '[a-z0-9_-]+'])
             ->name('downloads.latest');
     });
 

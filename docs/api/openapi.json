@@ -194,18 +194,9 @@
                                             "anyOf": [
                                                 {
                                                     "type": "object",
-                                                    "properties": {
-                                                        "default": {
-                                                            "type": "string"
-                                                        }
-                                                    },
-                                                    "required": [
-                                                        "default"
-                                                    ]
-                                                },
-                                                {
-                                                    "type": "array",
-                                                    "items": {}
+                                                    "additionalProperties": {
+                                                        "type": "string"
+                                                    }
                                                 },
                                                 {
                                                     "type": "string"
@@ -6088,9 +6079,10 @@
                 }
             }
         },
-        "/v1/downloads/latest/{product}/{platform}": {
+        "/v1/downloads/latest/{product}/{platform}/{variant}": {
             "get": {
                 "operationId": "v1.downloads.latest",
+                "summary": "`$variant` distinguishes builds of one platform (Android's `arm64-v8a` vs\n`armeabi-v7a`). Omitted means the universal build \u2014 a distinct artifact, not\n\"any of them\": guessing which ABI to hand a caller who did not ask would be\nan install failure on the wrong device, and silence about why",
                 "tags": [
                     "PublicDownload"
                 ],
@@ -6110,6 +6102,17 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    {
+                        "name": "variant",
+                        "in": "path",
+                        "required": true,
+                        "description": "**Optional**",
+                        "schema": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "x-optional": true
                     }
                 ],
                 "responses": {
@@ -7455,6 +7458,10 @@
                     "platform": {
                         "type": "string"
                     },
+                    "variant": {
+                        "type": "string",
+                        "description": "Empty string = universal (installs anywhere), not \"unset\"."
+                    },
                     "filename": {
                         "type": "string"
                     },
@@ -7480,6 +7487,7 @@
                 "required": [
                     "id",
                     "platform",
+                    "variant",
                     "filename",
                     "size",
                     "checksum_sha256",
@@ -9625,6 +9633,20 @@
                     },
                     "platform": {
                         "$ref": "#/components/schemas/Platform"
+                    },
+                    "variant": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "arm64-v8a",
+                            "armeabi-v7a",
+                            "x86_64",
+                            "x86",
+                            "arm64",
+                            "x64"
+                        ]
                     }
                 },
                 "required": [

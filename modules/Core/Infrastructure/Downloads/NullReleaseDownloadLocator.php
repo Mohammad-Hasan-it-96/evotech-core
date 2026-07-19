@@ -15,7 +15,7 @@ use Modules\Core\Domain\Contracts\ReleaseDownloadLocator;
 final class NullReleaseDownloadLocator implements ReleaseDownloadLocator
 {
     /**
-     * @return array<string, string>
+     * @return array<int, array{platform: string, variant: string, url: string}>
      */
     public function latestDownloadUrls(string $productSlug, ?string $channel = null): array
     {
