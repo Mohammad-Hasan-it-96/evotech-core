@@ -19,6 +19,7 @@ use Modules\DeviceSubscriptions\Database\Factories\DeviceSubscriptionFactory;
  * @property string|null $device_id
  * @property string|null $full_name
  * @property string|null $phone
+ * @property string|null $google_account
  * @property bool $is_verified
  * @property string|null $status
  * @property Carbon|null $expires_at
@@ -77,6 +78,7 @@ class DeviceSubscription extends Model
         'device_id',
         'full_name',
         'phone',
+        'google_account',
         'is_verified',
         'status',
         'expires_at',

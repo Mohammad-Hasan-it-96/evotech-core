@@ -1542,6 +1542,13 @@
                                             ],
                                             "format": "date-time"
                                         },
+                                        "google_account": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "Masked, never raw \u2014 and that is load-bearing, not cosmetic. This endpoint is in the legacy shim's public, unauthenticated group,\nand a device id is not a secret: the app shows it with a copy button\nand tells users to send it to support over WhatsApp. Returning the\nreal address here would hand anyone holding an id a customer's email.\n\nThe masked form is only a recognition cue for the account's own\nowner, who already knows which address it is. If the full address is\never needed in-app it belongs on the authenticated\n/api/v1/device twin, not here."
+                                        },
                                         "server_time": {
                                             "type": [
                                                 "string",
@@ -1555,6 +1562,7 @@
                                         "is_trial",
                                         "plan",
                                         "expires_at",
+                                        "google_account",
                                         "server_time"
                                     ]
                                 }
@@ -1650,6 +1658,15 @@
                                     },
                                     "fcm_token": {
                                         "type": "string"
+                                    },
+                                    "google_account": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "format": "email",
+                                        "description": "Nullable, unlike the others: signing out of Drive has to be\nexpressible, and the app says so by sending an explicit null.",
+                                        "maxLength": 255
                                     }
                                 },
                                 "required": [
@@ -2086,6 +2103,13 @@
                                             ],
                                             "format": "date-time"
                                         },
+                                        "google_account": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "Masked, never raw \u2014 and that is load-bearing, not cosmetic. This endpoint is in the legacy shim's public, unauthenticated group,\nand a device id is not a secret: the app shows it with a copy button\nand tells users to send it to support over WhatsApp. Returning the\nreal address here would hand anyone holding an id a customer's email.\n\nThe masked form is only a recognition cue for the account's own\nowner, who already knows which address it is. If the full address is\never needed in-app it belongs on the authenticated\n/api/v1/device twin, not here."
+                                        },
                                         "server_time": {
                                             "type": [
                                                 "string",
@@ -2099,6 +2123,7 @@
                                         "is_trial",
                                         "plan",
                                         "expires_at",
+                                        "google_account",
                                         "server_time"
                                     ]
                                 }
@@ -2204,6 +2229,15 @@
                                     },
                                     "fcm_token": {
                                         "type": "string"
+                                    },
+                                    "google_account": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "format": "email",
+                                        "description": "Nullable, unlike the others: signing out of Drive has to be\nexpressible, and the app says so by sending an explicit null.",
+                                        "maxLength": 255
                                     }
                                 },
                                 "required": [
@@ -2633,6 +2667,13 @@
                                             ],
                                             "format": "date-time"
                                         },
+                                        "google_account": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "Masked, never raw \u2014 and that is load-bearing, not cosmetic. This endpoint is in the legacy shim's public, unauthenticated group,\nand a device id is not a secret: the app shows it with a copy button\nand tells users to send it to support over WhatsApp. Returning the\nreal address here would hand anyone holding an id a customer's email.\n\nThe masked form is only a recognition cue for the account's own\nowner, who already knows which address it is. If the full address is\never needed in-app it belongs on the authenticated\n/api/v1/device twin, not here."
+                                        },
                                         "server_time": {
                                             "type": [
                                                 "string",
@@ -2646,6 +2687,7 @@
                                         "is_trial",
                                         "plan",
                                         "expires_at",
+                                        "google_account",
                                         "server_time"
                                     ]
                                 }
@@ -2744,6 +2786,15 @@
                                     },
                                     "fcm_token": {
                                         "type": "string"
+                                    },
+                                    "google_account": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "format": "email",
+                                        "description": "Nullable, unlike the others: signing out of Drive has to be\nexpressible, and the app says so by sending an explicit null.",
+                                        "maxLength": 255
                                     }
                                 },
                                 "required": [
@@ -7936,6 +7987,12 @@
                             "null"
                         ],
                         "format": "date-time"
+                    },
+                    "google_account": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 },
                 "required": [
@@ -7956,7 +8013,8 @@
                     "status",
                     "requested_plan",
                     "contact_method",
-                    "trial_expires_at"
+                    "trial_expires_at",
+                    "google_account"
                 ],
                 "title": "DeviceSubscription"
             },
@@ -7989,6 +8047,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "google_account": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Unmasked here, unlike check_device. This resource is behind\nauth:sanctum and exists so an operator can answer \"which account\nare my backups on?\" \u2014 a masked answer would not answer it."
                     },
                     "is_verified": {
                         "type": "boolean"
@@ -8055,6 +8120,7 @@
                     "device_id",
                     "full_name",
                     "phone",
+                    "google_account",
                     "is_verified",
                     "is_active",
                     "is_trial",

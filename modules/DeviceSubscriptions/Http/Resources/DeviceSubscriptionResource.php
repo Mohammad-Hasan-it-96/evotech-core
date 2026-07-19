@@ -26,6 +26,12 @@ class DeviceSubscriptionResource extends JsonResource
             'device_id' => $this->device_id,
             'full_name' => $this->full_name,
             'phone' => $this->phone,
+            /*
+             * Unmasked here, unlike check_device. This resource is behind
+             * auth:sanctum and exists so an operator can answer "which account
+             * are my backups on?" — a masked answer would not answer it.
+             */
+            'google_account' => $this->google_account,
             'is_verified' => $this->is_verified,
             'is_active' => $this->isActive(),
             'is_trial' => $this->isOnTrial(),

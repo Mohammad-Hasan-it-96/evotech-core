@@ -33,8 +33,30 @@ with no auth token**, so the module exposes three route groups:
 | Method | Path | Controller | Notes |
 |---|---|---|---|
 | POST | `/api/create_device` | `DeviceController@createDevice` | Register a device, refresh its `fcm_token`, **or file a plan request** (`requested_plan` + `contact_method` + `status`). Idempotent on the pair. Returns `is_verified`, `is_trial`, `expires_at`, `plan`, `fcm_token`, `server_time`. |
-| POST | `/api/check_device` | `DeviceController@checkDevice` | Status; `is_verified` forced `0` past `expires_at`. Returns `is_trial` + `server_time`. `404` if unknown. |
-| POST | `/api/update_my_data` | `DeviceController@updateMyData` | **Partial** update — any of name/phone/token. Only what's sent is written. |
+| POST | `/api/check_device` | `DeviceController@checkDevice` | Status; `is_verified` forced `0` past `expires_at`. Returns `is_trial` + `server_time`. `404` if unknown. Also returns `google_account` **masked** — see below. |
+| POST | `/api/update_my_data` | `DeviceController@updateMyData` | **Partial** update — any of name/phone/token/`google_account`. Only what's sent is written. |
+
+### `google_account` — masked on the public surface
+
+The Google account holding a device's Drive backups. Support needs it to answer
+"where are my backups?", and a reinstalled app uses it to remind the user which
+account to sign back into.
+
+`check_device` returns it **masked** (`s••••backups@gmail.com`), and that is
+load-bearing rather than cosmetic: this endpoint is in the public, unauthenticated
+shim group, and **a device id is not a secret** — the app displays it with a copy
+button and tells users to send it to support over WhatsApp. Returning the real
+address would hand anyone holding an id a customer's email. The masked form is only
+a recognition cue for the account's own owner. If a full address is ever needed
+in-app it belongs on the authenticated `/api/v1/device/*` twin.
+
+The staff resource returns it **unmasked** — that surface is behind `auth:sanctum`
+and exists precisely so an operator can read it.
+
+It is also the one profile field where an **explicit `null` clears the column**,
+because signing out of Drive has to be expressible. Name/phone/token keep
+`filled()` semantics: they are never legitimately cleared, and on a public endpoint
+a stray null must not blank a customer's name.
 | POST | `/api/add_review` | `DeviceController@addReview` | Store `stars` (1–5) + `comment`. |
 | GET | `/api/getPlans` | `PlanController@index` | Static plan catalog from config. |
 | GET | `/api/app-download` | `AppDownloadController@index` | Version + APK links (JSON; the HTML page lives in evotech-web). |
