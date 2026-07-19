@@ -19,6 +19,8 @@ class ArtifactResource extends JsonResource
         return [
             'id' => $this->uuid,
             'platform' => $this->platform->value,
+            // Empty string = universal (installs anywhere), not "unset".
+            'variant' => $this->variant,
             'filename' => $this->filename,
             'size' => $this->size,
             'checksum_sha256' => $this->checksum_sha256,

@@ -42,6 +42,7 @@ final class ArtifactController extends ApiController
             $release,
             $file,
             Platform::from((string) $request->string('platform')),
+            $request->variant(),
             $this->actorId($request),
         );
 

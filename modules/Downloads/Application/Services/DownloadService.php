@@ -120,8 +120,13 @@ final class DownloadService
      * and content-detected MIME type are recorded (ADR 0008, §16.7). Re-uploading
      * a platform replaces its file.
      */
-    public function storeArtifact(Release $release, UploadedFile $file, Platform $platform, ?string $actorId = null): Artifact
-    {
+    public function storeArtifact(
+        Release $release,
+        UploadedFile $file,
+        Platform $platform,
+        string $variant = '',
+        ?string $actorId = null,
+    ): Artifact {
         $disk = Config::string('downloads.disk');
         $checksum = (string) hash_file('sha256', (string) $file->getRealPath());
         $size = (int) $file->getSize();
@@ -131,12 +136,18 @@ final class DownloadService
 
         $path = (string) $file->store($directory, $disk);
 
-        $existing = $release->artifacts()->where('platform', $platform->value)->first();
+        // Keyed on platform AND variant: an arm64 upload must sit alongside the
+        // armeabi one, not replace it.
+        $existing = $release->artifacts()
+            ->where('platform', $platform->value)
+            ->where('variant', $variant)
+            ->first();
+
         $oldDisk = $existing?->disk;
         $oldPath = $existing?->path;
 
         $artifact = $release->artifacts()->updateOrCreate(
-            ['platform' => $platform->value],
+            ['platform' => $platform->value, 'variant' => $variant],
             [
                 'disk' => $disk,
                 'path' => $path,
@@ -154,6 +165,7 @@ final class DownloadService
         $this->audit->log('artifact.uploaded', 'artifact', $artifact->uuid, [
             'release' => $release->uuid,
             'platform' => $platform->value,
+            'variant' => $variant,
         ], $actorId);
 
         return $artifact;
@@ -166,9 +178,19 @@ final class DownloadService
         $artifact->delete();
     }
 
-    /** The latest published release for a product on a channel (auto-update check). */
-    public function latestPublished(int $productId, ReleaseChannel $channel, ?Platform $platform = null): ?Release
-    {
+    /**
+     * The latest published release for a product on a channel (auto-update check).
+     *
+     * `$variant` only narrows when a platform is given — on its own it would ask
+     * "a release with an arm64-v8a build of anything", which is not a question
+     * anyone means.
+     */
+    public function latestPublished(
+        int $productId,
+        ReleaseChannel $channel,
+        ?Platform $platform = null,
+        ?string $variant = null,
+    ): ?Release {
         $query = Release::query()
             ->where('product_id', $productId)
             ->where('channel', $channel->value)
@@ -178,7 +200,13 @@ final class DownloadService
             ->orderByDesc('id');
 
         if ($platform !== null) {
-            $query->whereHas('artifacts', fn ($a) => $a->where('platform', $platform->value));
+            $query->whereHas('artifacts', function ($a) use ($platform, $variant) {
+                $a->where('platform', $platform->value);
+
+                if ($variant !== null) {
+                    $a->where('variant', $variant);
+                }
+            });
         }
 
         return $query->first();

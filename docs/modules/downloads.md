@@ -6,7 +6,7 @@ catalog (reference data) and depends on the [Gateway](gateway.md) module's `Prod
 **contract** for its product-facing endpoints (acyclic: `Downloads → {Products, Gateway·contract} → Core`).
 
 The model: a **Release** is a versioned publication of a product on a **channel**
-(`stable`/`beta`/`alpha`); it groups one **Artifact** per **platform**
+(`stable`/`beta`/`alpha`); it groups one **Artifact** per **platform + variant**
 (`windows`/`macos`/`linux`/`android`/`ios`/`web`/`any`). Only a **Published** release is
 visible to products and downloadable. Files never live at a public path — they sit on a
 **private disk** and are handed out only as **short-lived signed URLs** ([ADR 0008](../adr/0008-download-center-delivery.md)).
@@ -37,7 +37,7 @@ visible to products and downloadable. Files never live at a public path — they
 | POST | `/releases/{release}/publish` | `releases.publish` | Publish — **requires ≥1 artifact** (`422` otherwise); audited `release.published`. |
 | POST | `/releases/{release}/archive` | `releases.archive` | Retire a release. |
 | GET | `/releases/{release}/artifacts` | `releases.artifacts.index` | List the release's per-platform artifacts. |
-| POST | `/releases/{release}/artifacts` | `releases.artifacts.store` | Upload (multipart: `file`, `platform`) — checksummed; replaces an existing platform. `201`. Audited `artifact.uploaded`. **Extension allowlist** (installers, archives, firmware images): the endpoint serves files from the platform's own origin, so an `.html` or `.svg` artifact would be script running as this site — and the recorded content type is detected, never enforced. Checked by extension rather than MIME because an APK and a JAR are both `application/zip`. |
+| POST | `/releases/{release}/artifacts` | `releases.artifacts.store` | Upload (multipart: `file`, `platform`, optional `variant`) — checksummed; replaces an existing platform+variant pair, so a second ABI sits alongside the first rather than overwriting it. `201`. Audited `artifact.uploaded`. **Extension allowlist** (installers, archives, firmware images): the endpoint serves files from the platform's own origin, so an `.html` or `.svg` artifact would be script running as this site — and the recorded content type is detected, never enforced. Checked by extension rather than MIME because an APK and a JAR are both `application/zip`. |
 | DELETE | `/artifacts/{artifact}` | `artifacts.destroy` | Soft-delete an artifact and remove its file. `204`. |
 | POST | `/artifacts/{artifact}/link` | `artifacts.link` | Mint a signed download URL (`{data:{url, expires_at}}`); records a `staff` download event. |
 | GET | `/downloads/events` | `downloads.events.index` | Read the download ledger; filter by `artifact` (uuid). |
@@ -52,7 +52,14 @@ visible to products and downloadable. Files never live at a public path — they
 
 | Method | Path | Name | Description |
 |---|---|---|---|
-| GET | `/downloads/latest/{product}/{platform}` | `downloads.latest` | 302 to a freshly minted signed link for the **current published** build. `?channel=` defaults to `stable`. `404` for an unknown product/platform/channel or a release that is not published. |
+| GET | `/downloads/latest/{product}/{platform}/{variant?}` | `downloads.latest` | 302 to a freshly minted signed link for the **current published** build. `?channel=` defaults to `stable`. `404` for an unknown product/platform/variant/channel or a release that is not published. |
+
+**`variant`** distinguishes builds of one platform — Android's `arm64-v8a` and
+`armeabi-v7a`. Omitting it addresses the **universal** build specifically; it does
+not pick one of the ABIs. Guessing would hand an arm64 APK to an armeabi device:
+an install failure, with nothing explaining why. Stored as an empty string, which
+is why the column is `NOT NULL` — SQL treats NULLs as distinct, so a nullable
+column would let two rows both claim the universal slot unnoticed.
 
 **Why this exists next to signed links.** A signed URL is right for an authenticated
 product self-updating — per-product, audited, short-lived. It is useless for the one

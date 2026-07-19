@@ -38,6 +38,21 @@ class UploadArtifactRequest extends FormRequest
         'bin', 'hex', 'img',
     ];
 
+    /**
+     * Builds of the same platform that are not interchangeable.
+     *
+     * Constrained to a known set because the value ends up in a public URL and,
+     * for Android, is matched *exactly* against the ABI a device reports — a
+     * typo'd variant is not a validation nicety, it is a download no device can
+     * find. Omitting it means universal: one build that installs anywhere.
+     */
+    private const ALLOWED_VARIANTS = [
+        // Android ABIs, as `Build.SUPPORTED_ABIS` reports them.
+        'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86',
+        // Desktop architectures.
+        'arm64', 'x64',
+    ];
+
     public function authorize(): bool
     {
         return true;
@@ -51,7 +66,16 @@ class UploadArtifactRequest extends FormRequest
         return [
             'file' => ['required', 'file', 'max:'.Config::integer('downloads.max_upload_kilobytes')],
             'platform' => ['required', Rule::enum(Platform::class)],
+            'variant' => ['sometimes', 'nullable', 'string', Rule::in(self::ALLOWED_VARIANTS)],
         ];
+    }
+
+    /** Empty string is the storage form of "universal", never null. */
+    public function variant(): string
+    {
+        $variant = $this->input('variant');
+
+        return is_string($variant) ? trim($variant) : '';
     }
 
     /**

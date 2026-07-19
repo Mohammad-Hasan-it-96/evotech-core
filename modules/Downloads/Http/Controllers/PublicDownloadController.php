@@ -45,8 +45,18 @@ final class PublicDownloadController
 {
     public function __construct(private readonly DownloadService $downloads) {}
 
-    public function __invoke(Request $request, string $product, string $platform): RedirectResponse
-    {
+    /**
+     * `$variant` distinguishes builds of one platform (Android's `arm64-v8a` vs
+     * `armeabi-v7a`). Omitted means the universal build — a distinct artifact, not
+     * "any of them": guessing which ABI to hand a caller who did not ask would be
+     * an install failure on the wrong device, and silence about why.
+     */
+    public function __invoke(
+        Request $request,
+        string $product,
+        string $platform,
+        string $variant = '',
+    ): RedirectResponse {
         $platformCase = Platform::tryFrom(mb_strtolower($platform));
 
         abort_if($platformCase === null, 404);
@@ -63,7 +73,7 @@ final class PublicDownloadController
 
         abort_if($productModel === null, 404);
 
-        $release = $this->downloads->latestPublished($productModel->id, $channel, $platformCase);
+        $release = $this->downloads->latestPublished($productModel->id, $channel, $platformCase, $variant);
 
         abort_if($release === null, 404);
 
@@ -73,7 +83,9 @@ final class PublicDownloadController
          * because a null here would otherwise surface as a type error on a public,
          * unauthenticated route.
          */
-        $artifact = $release->artifacts->firstWhere('platform', $platformCase->value);
+        $artifact = $release->artifacts
+            ->where('platform', $platformCase)
+            ->firstWhere('variant', $variant);
 
         abort_if(! $artifact instanceof Artifact, 404);
 

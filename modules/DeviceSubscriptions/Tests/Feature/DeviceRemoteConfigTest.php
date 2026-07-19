@@ -329,11 +329,16 @@ class DeviceRemoteConfigTest extends TestCase
     {
         $this->app->instance(ReleaseDownloadLocator::class, new class implements ReleaseDownloadLocator
         {
-            /** @return array<string, string> */
+            /** @return array<int, array{platform: string, variant: string, url: string}> */
             public function latestDownloadUrls(string $productSlug, ?string $channel = null): array
             {
                 return $productSlug === 'invoices'
-                    ? ['android' => 'https://api.evotech-sys.com/api/v1/downloads/latest/invoices/android']
+                    ? [[
+                        'platform' => 'android',
+                        // Universal build — becomes the `default` key.
+                        'variant' => '',
+                        'url' => 'https://api.evotech-sys.com/api/v1/downloads/latest/invoices/android',
+                    ]]
                     : [];
             }
         });
@@ -364,10 +369,14 @@ class DeviceRemoteConfigTest extends TestCase
     {
         $this->app->instance(ReleaseDownloadLocator::class, new class implements ReleaseDownloadLocator
         {
-            /** @return array<string, string> */
+            /** @return array<int, array{platform: string, variant: string, url: string}> */
             public function latestDownloadUrls(string $productSlug, ?string $channel = null): array
             {
-                return ['android' => 'https://example.test/derived.apk'];
+                return [[
+                    'platform' => 'android',
+                    'variant' => '',
+                    'url' => 'https://example.test/derived.apk',
+                ]];
             }
         });
 

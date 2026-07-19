@@ -14,14 +14,19 @@ use Modules\Downloads\Database\Factories\ArtifactFactory;
 use Modules\Downloads\Domain\Enums\Platform;
 
 /**
- * A downloadable file belonging to a release, one per platform. Stored on the
- * private `downloads` disk and delivered only via short-lived signed URLs
- * (ADR 0008). Carries a SHA-256 checksum so a device can verify integrity.
+ * A downloadable file belonging to a release, one per platform *and variant*.
+ * Stored on the private `downloads` disk and delivered only via short-lived signed
+ * URLs (ADR 0008). Carries a SHA-256 checksum so a device can verify integrity.
+ *
+ * `variant` distinguishes builds of the same platform — Android's `arm64-v8a` and
+ * `armeabi-v7a`. An empty string means universal: one build that installs
+ * anywhere, which is what every artifact was before variants existed.
  *
  * @property int $id
  * @property string $uuid
  * @property int $release_id
  * @property Platform $platform
+ * @property string $variant
  * @property string $disk
  * @property string $path
  * @property string $filename
@@ -49,6 +54,7 @@ class Artifact extends Model
     protected $fillable = [
         'release_id',
         'platform',
+        'variant',
         'disk',
         'path',
         'filename',

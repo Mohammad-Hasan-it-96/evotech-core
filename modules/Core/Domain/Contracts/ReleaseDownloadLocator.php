@@ -19,8 +19,12 @@ namespace Modules\Core\Domain\Contracts;
 interface ReleaseDownloadLocator
 {
     /**
-     * Permanent download URLs for a product's latest published release, keyed by
-     * platform (`android`, `windows`, …).
+     * Permanent download URLs for a product's latest published release.
+     *
+     * A list rather than a platform-keyed map, because a platform can have several
+     * builds: Android ships `arm64-v8a` and `armeabi-v7a` separately, and a map
+     * keyed by platform alone could only hold one of them. `variant` is an empty
+     * string for a universal build.
      *
      * Returns an empty array when the product is unknown, has no published
      * release, or that release has no artifacts — all normal states, none of them
@@ -28,7 +32,7 @@ interface ReleaseDownloadLocator
      * offer" and "something went wrong" would be handled identically anyway.
      *
      * @param  string|null  $channel  Null uses the configured default channel.
-     * @return array<string, string>
+     * @return array<int, array{platform: string, variant: string, url: string}>
      */
     public function latestDownloadUrls(string $productSlug, ?string $channel = null): array;
 }
