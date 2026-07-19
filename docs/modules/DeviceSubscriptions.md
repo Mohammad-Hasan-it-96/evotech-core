@@ -161,6 +161,30 @@ prompt that never fires, not as an error anyone sees. Hence:
 
 Firebase credentials are **not** part of this — see the note below.
 
+### SmartAgent's cutover
+
+SmartAgent's shipped builds read a **hardcoded Google Drive file**, and Drive serves
+bytes rather than redirecting — so nothing the dashboard does reaches them until a
+release points at `/config/smartagent.json`. Its row is seeded with the Drive file's
+exact values so that release is a one-line change with no config scramble behind it.
+
+**`api_base_url` is deliberately the legacy `harrypotter.foodsalebot.com` host.**
+SmartAgent applies `base_url` *destructively*: where Fawateer keeps its current value
+when the field is blank, SmartAgent resets the persisted URL to its compiled-in
+default. Whatever this column holds becomes where every device talks, on the next
+launch, silently. Serving the derived `…/api/smartagent` would migrate the whole app
+to a platform that does not serve its users — so moving it here stays a deliberate
+one-field edit, made when someone decides to make it.
+
+Cutover order, and it matters:
+
+1. Ship a build reading `/config/smartagent.json` (identical content to Drive, so
+   nothing changes for anyone).
+2. Update the **Drive** file one last time to advertise that version + its APK URL,
+   so existing installs are prompted to update.
+3. Once installs have moved, Drive is dead and the config is dashboard-managed.
+4. Only then, if wanted, repoint `api_base_url` at this platform.
+
 ## Per-app settings & the free trial
 
 One deployment serves several shipped apps, told apart only by the `app_name` they send.

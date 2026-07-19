@@ -260,6 +260,61 @@ class DeviceRemoteConfigTest extends TestCase
         );
     }
 
+    // --- SmartAgent -------------------------------------------------------------
+
+    /**
+     * The single most dangerous value in this codebase.
+     *
+     * Smart-Agent applies `base_url` destructively — where Fawateer keeps its
+     * current value when the field is blank, Smart-Agent *resets* the persisted URL
+     * to its compiled-in default. Whatever is served here becomes where every
+     * device talks, on the next launch, silently.
+     *
+     * Its users are on the legacy backend. Serving the derived
+     * `…/api/smartagent` would migrate the entire app to a platform that does not
+     * serve them, and nothing in the app would report an error. This asserts the
+     * seeded value is the legacy host, so pointing a build here changes nothing
+     * about where it talks and the migration stays a deliberate decision.
+     */
+    public function test_smartagent_still_points_at_the_legacy_backend(): void
+    {
+        $this->getJson('/api/smartagent/remote-config')
+            ->assertOk()
+            ->assertJsonPath('api.base_url', 'https://harrypotter.foodsalebot.com/api');
+    }
+
+    /** Byte-equivalent to the Drive file its shipped builds read today. */
+    public function test_smartagent_reproduces_the_drive_file(): void
+    {
+        $payload = $this->getJson('/api/smartagent/remote-config')->assertOk();
+
+        $payload->assertJsonPath('latest_version', '1.1.1');
+        $payload->assertJsonPath(
+            'downloads.arm64-v8a',
+            'https://harrypotter.foodsalebot.com/downloads/app-arm64-v8a-release.apk',
+        );
+        $payload->assertJsonPath(
+            'downloads.armeabi-v7a',
+            'https://harrypotter.foodsalebot.com/downloads/app-armeabi-v7a-release.apk',
+        );
+        // Its own inbox: sending its users to Fawateer's support would be invisible
+        // here and obvious to them.
+        $payload->assertJsonPath('support.email', 'smart.agent.app.support@gmail.com');
+        $this->assertCount(3, (array) $payload->json('update_notes'));
+    }
+
+    /**
+     * An empty version is what currently, accidentally, protects Smart-Agent: its
+     * parser bails before applying base_url. That is luck, not a safeguard — this
+     * pins that the seeded config does not rely on it.
+     */
+    public function test_smartagent_has_a_version_so_its_config_is_actually_applied(): void
+    {
+        $this->getJson('/api/smartagent/remote-config')
+            ->assertOk()
+            ->assertJsonPath('latest_version', '1.1.1');
+    }
+
     // --- Download links from the Download Center -------------------------------
 
     /**
