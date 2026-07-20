@@ -29,6 +29,9 @@ Route::prefix('api/v1')
         Route::delete('releases/{release}', [ReleaseController::class, 'destroy'])->name('releases.destroy');
         Route::post('releases/{release}/publish', [ReleaseController::class, 'publish'])->name('releases.publish');
         Route::post('releases/{release}/archive', [ReleaseController::class, 'archive'])->name('releases.archive');
+        // Without this an archived release is stranded: publishing is gated on
+        // draft, so there is no way back and its builds can never serve again.
+        Route::post('releases/{release}/unarchive', [ReleaseController::class, 'unarchive'])->name('releases.unarchive');
 
         // Per-platform artifacts of a release.
         Route::get('releases/{release}/artifacts', [ArtifactController::class, 'index'])->name('releases.artifacts.index');

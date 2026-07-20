@@ -74,6 +74,12 @@ final class ReleaseController extends ApiController
         return $this->present($this->downloads->archive($release));
     }
 
+    /** Restore an archived release to draft, so it can be published again. */
+    public function unarchive(Request $request, Release $release): ReleaseResource
+    {
+        return $this->present($this->downloads->unarchive($release));
+    }
+
     public function destroy(Release $release): JsonResponse
     {
         $this->downloads->deleteRelease($release);

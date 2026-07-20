@@ -108,6 +108,22 @@ final class DownloadService
         return $release;
     }
 
+    /**
+     * Bring an archived release back, as a draft.
+     *
+     * Back to *draft* rather than straight to published, even though most
+     * archived releases were published once: restoring is undoing a mistake, and
+     * the mistake is often archiving the wrong row. Landing in draft means that
+     * slip cannot silently republish a build to every device on the public
+     * download URL — re-publishing stays the deliberate act it is everywhere else.
+     */
+    public function unarchive(Release $release): Release
+    {
+        $release->update(['status' => ReleaseStatus::Draft]);
+
+        return $release;
+    }
+
     public function deleteRelease(Release $release): void
     {
         foreach ($release->artifacts()->get() as $artifact) {

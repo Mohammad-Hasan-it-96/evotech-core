@@ -110,6 +110,28 @@ class ReleaseManagementTest extends TestCase
         $this->assertNotNull($release->refresh()->published_at);
     }
 
+    public function test_an_archived_release_can_be_restored_and_published_again(): void
+    {
+        $this->actAsStaff();
+        $release = Release::factory()->create();
+        Artifact::factory()->create(['release_id' => $release->id]);
+
+        $this->postJson("/api/v1/releases/{$release->uuid}/publish")->assertOk();
+        $this->postJson("/api/v1/releases/{$release->uuid}/archive")->assertOk();
+
+        // Landing in draft rather than published: restoring is undoing a mistake,
+        // and archiving the wrong row must not silently republish a build.
+        $this->postJson("/api/v1/releases/{$release->uuid}/unarchive")
+            ->assertOk()
+            ->assertJsonPath('data.status', ReleaseStatus::Draft->value);
+
+        // The point of restoring — an archived release was otherwise stranded,
+        // since publishing is gated on draft and nothing could reach it.
+        $this->postJson("/api/v1/releases/{$release->uuid}/publish")
+            ->assertOk()
+            ->assertJsonPath('data.status', ReleaseStatus::Published->value);
+    }
+
     public function test_deleting_an_artifact_removes_the_stored_file(): void
     {
         $this->actAsStaff();
