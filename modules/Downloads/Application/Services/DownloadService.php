@@ -17,6 +17,7 @@ use Modules\Downloads\Domain\ArtifactFormats;
 use Modules\Downloads\Domain\Enums\Platform;
 use Modules\Downloads\Domain\Enums\ReleaseChannel;
 use Modules\Downloads\Domain\Enums\ReleaseStatus;
+use Modules\Downloads\Domain\Events\ReleasePublished;
 use Modules\Downloads\Domain\Models\Artifact;
 use Modules\Downloads\Domain\Models\DownloadEvent;
 use Modules\Downloads\Domain\Models\Release;
@@ -78,8 +79,14 @@ final class DownloadService
         return $release;
     }
 
-    /** Publish a release — requires at least one artifact. */
-    public function publish(Release $release, ?string $actorId = null): Release
+    /**
+     * Publish a release — requires at least one artifact.
+     *
+     * `$syncAppVersion` rides the ReleasePublished event: when set, a consumer app
+     * linked to this product aligns its advertised update version to this release
+     * (handled in DeviceSubscriptions, not here — §2.4).
+     */
+    public function publish(Release $release, ?string $actorId = null, bool $syncAppVersion = false): Release
     {
         if ($release->artifacts()->count() === 0) {
             throw ValidationException::withMessages([
@@ -97,6 +104,8 @@ final class DownloadService
             'channel' => $release->channel->value,
             'version' => $release->version,
         ], $actorId);
+
+        ReleasePublished::dispatch($release->product->slug, $release->version, $syncAppVersion);
 
         return $release;
     }

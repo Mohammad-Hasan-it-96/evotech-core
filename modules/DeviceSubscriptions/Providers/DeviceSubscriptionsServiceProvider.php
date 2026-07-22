@@ -2,13 +2,16 @@
 
 namespace Modules\DeviceSubscriptions\Providers;
 
+use Illuminate\Support\Facades\Event;
 use Modules\Core\Providers\BaseModuleServiceProvider;
+use Modules\DeviceSubscriptions\Application\Listeners\SyncAppVersionFromRelease;
 use Modules\DeviceSubscriptions\Application\Services\DeviceCatalogStore;
 use Modules\DeviceSubscriptions\Console\ImportLegacyDevicesCommand;
 use Modules\DeviceSubscriptions\Console\SweepDeviceExpiryCommand;
 use Modules\DeviceSubscriptions\Domain\Contracts\DevicePushNotifier;
 use Modules\DeviceSubscriptions\Infrastructure\Push\FirebasePushNotifier;
 use Modules\DeviceSubscriptions\Infrastructure\Push\NullPushNotifier;
+use Modules\Downloads\Domain\Events\ReleasePublished;
 
 /**
  * DeviceSubscriptions module (ADR 0010): device-keyed, non-tenant subscriptions
@@ -49,5 +52,9 @@ final class DeviceSubscriptionsServiceProvider extends BaseModuleServiceProvider
                 ImportLegacyDevicesCommand::class,
             ]);
         }
+
+        // React to a Download Center publish by aligning the consumer app's
+        // advertised update version — when the operator asked for it (§2.4).
+        Event::listen(ReleasePublished::class, SyncAppVersionFromRelease::class);
     }
 }
