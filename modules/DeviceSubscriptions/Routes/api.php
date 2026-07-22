@@ -6,6 +6,7 @@ use Modules\DeviceSubscriptions\Http\Controllers\AppRemoteConfigController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceAdminController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceCatalogController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceController;
+use Modules\DeviceSubscriptions\Http\Controllers\DeviceNotificationController;
 use Modules\DeviceSubscriptions\Http\Controllers\PlanController;
 
 /*
@@ -129,4 +130,16 @@ Route::prefix('api/v1')
             ->name('device-plans.update');
         Route::delete('device-plans/{devicePlan}', [DeviceCatalogController::class, 'destroyPlan'])
             ->name('device-plans.destroy');
+
+        /*
+         * Custom notifications — offers, updates, announcements. Two-step by
+         * design: `test` sends to one device (the operator's phone) before
+         * `broadcast` sends to an app's audience; `index` is the sent history.
+         */
+        Route::get('device-notifications', [DeviceNotificationController::class, 'index'])
+            ->name('device-notifications.index');
+        Route::post('device-notifications/test', [DeviceNotificationController::class, 'test'])
+            ->name('device-notifications.test');
+        Route::post('device-notifications/broadcast', [DeviceNotificationController::class, 'broadcast'])
+            ->name('device-notifications.broadcast');
     });

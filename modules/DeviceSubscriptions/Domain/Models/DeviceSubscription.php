@@ -156,6 +156,22 @@ class DeviceSubscription extends Model
         return $query->where('device_id', $deviceId)->where('app_name', $appName);
     }
 
+    /**
+     * Devices with live access: verified and not past expiry. The query-side twin
+     * of [isActive], for narrowing a broadcast to active subscribers.
+     *
+     * @param  Builder<DeviceSubscription>  $query
+     * @return Builder<DeviceSubscription>
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query
+            ->where('is_verified', true)
+            ->where(fn (Builder $inner): Builder => $inner
+                ->whereNull('expires_at')
+                ->orWhere('expires_at', '>', Carbon::now()));
+    }
+
     protected static function newFactory(): DeviceSubscriptionFactory
     {
         return DeviceSubscriptionFactory::new();
