@@ -49,23 +49,14 @@
                                                     "type": "boolean"
                                                 },
                                                 "latest_version": {
-                                                    "type": "string"
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
                                                 },
                                                 "downloads": {
-                                                    "anyOf": [
-                                                        {
-                                                            "type": "string"
-                                                        },
-                                                        {
-                                                            "type": "array",
-                                                            "items": {
-                                                                "type": "string"
-                                                            },
-                                                            "minItems": 0,
-                                                            "maxItems": 0,
-                                                            "additionalItems": false
-                                                        }
-                                                    ]
+                                                    "type": "array",
+                                                    "items": {}
                                                 }
                                             },
                                             "required": [
@@ -135,23 +126,14 @@
                                                     "type": "boolean"
                                                 },
                                                 "latest_version": {
-                                                    "type": "string"
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
                                                 },
                                                 "downloads": {
-                                                    "anyOf": [
-                                                        {
-                                                            "type": "string"
-                                                        },
-                                                        {
-                                                            "type": "array",
-                                                            "items": {
-                                                                "type": "string"
-                                                            },
-                                                            "minItems": 0,
-                                                            "maxItems": 0,
-                                                            "additionalItems": false
-                                                        }
-                                                    ]
+                                                    "type": "array",
+                                                    "items": {}
                                                 }
                                             },
                                             "required": [
@@ -292,7 +274,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -338,7 +320,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -458,7 +440,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -516,7 +498,7 @@
                         "required": true,
                         "description": "The artifact UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -547,7 +529,7 @@
                         "required": true,
                         "description": "The artifact UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -978,7 +960,7 @@
                         "required": true,
                         "description": "The company UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1021,7 +1003,7 @@
                         "required": true,
                         "description": "The company UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1076,7 +1058,7 @@
                         "required": true,
                         "description": "The company UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1310,7 +1292,7 @@
                         "required": true,
                         "description": "The customer UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1353,7 +1335,7 @@
                         "required": true,
                         "description": "The customer UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1408,7 +1390,7 @@
                         "required": true,
                         "description": "The customer UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1438,7 +1420,7 @@
                         "required": true,
                         "description": "The artifact UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -1540,13 +1522,23 @@
                                             "type": "integer"
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "fcm_token": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "server_time": {
                                             "type": [
@@ -1649,10 +1641,17 @@
                                             "type": "integer"
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         },
                                         "server_time": {
                                             "type": [
@@ -2057,13 +2056,23 @@
                                             "type": "integer"
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "fcm_token": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "server_time": {
                                             "type": [
@@ -2176,10 +2185,17 @@
                                             "type": "integer"
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         },
                                         "server_time": {
                                             "type": [
@@ -2594,13 +2610,23 @@
                                             "type": "integer"
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "fcm_token": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "server_time": {
                                             "type": [
@@ -2706,10 +2732,17 @@
                                             "type": "integer"
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         },
                                         "server_time": {
                                             "type": [
@@ -3081,10 +3114,17 @@
                                             "const": 1
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         }
                                     },
                                     "required": [
@@ -3248,10 +3288,17 @@
                                             "const": 1
                                         },
                                         "plan": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "expires_at": {
-                                            "type": "string"
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
                                         }
                                     },
                                     "required": [
@@ -3594,7 +3641,7 @@
                         "required": true,
                         "description": "The device subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -3662,7 +3709,7 @@
                         "required": true,
                         "description": "The device subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -3728,7 +3775,7 @@
                         "required": true,
                         "description": "The device subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -3818,7 +3865,7 @@
                         "required": true,
                         "description": "The device app UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -3962,7 +4009,7 @@
                         "required": true,
                         "description": "The device plan UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -4019,7 +4066,7 @@
                         "required": true,
                         "description": "The device plan UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -4756,7 +4803,7 @@
                         "required": true,
                         "description": "The invoice UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -4801,7 +4848,7 @@
                         "required": true,
                         "description": "The invoice UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -4846,7 +4893,7 @@
                         "required": true,
                         "description": "The license UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -4891,7 +4938,7 @@
                         "required": true,
                         "description": "The license UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -4936,7 +4983,7 @@
                         "required": true,
                         "description": "The license UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -5185,7 +5232,7 @@
                         "required": true,
                         "description": "The license UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -5230,7 +5277,7 @@
                         "required": true,
                         "description": "The license UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -5276,7 +5323,7 @@
                         "required": true,
                         "description": "The license UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -5334,7 +5381,7 @@
                         "required": true,
                         "description": "The license UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     },
                     {
@@ -5343,7 +5390,7 @@
                         "required": true,
                         "description": "The activation UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -5788,7 +5835,7 @@
                         "required": true,
                         "description": "The invoice UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6005,7 +6052,7 @@
                         "required": true,
                         "description": "The product slug",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6047,7 +6094,7 @@
                         "required": true,
                         "description": "The product slug",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6093,7 +6140,7 @@
                         "required": true,
                         "description": "The product slug",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6151,7 +6198,7 @@
                         "required": true,
                         "description": "The api key UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6356,7 +6403,7 @@
                         "required": true,
                         "description": "The artifact UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6739,7 +6786,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6782,7 +6829,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6837,7 +6884,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6867,7 +6914,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6912,7 +6959,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -6958,7 +7005,7 @@
                         "required": true,
                         "description": "The release UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -7093,7 +7140,7 @@
                         "required": true,
                         "description": "The invoice UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -7358,7 +7405,7 @@
                         "required": true,
                         "description": "The subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -7403,7 +7450,7 @@
                         "required": true,
                         "description": "The subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -7652,7 +7699,7 @@
                         "required": true,
                         "description": "The subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -7695,7 +7742,7 @@
                         "required": true,
                         "description": "The subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -7750,7 +7797,7 @@
                         "required": true,
                         "description": "The subscription UUID",
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -7841,16 +7888,19 @@
                         "type": "string"
                     },
                     "size": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "checksum_sha256": {
                         "type": "string"
                     },
                     "content_type": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "download_count": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "created_at": {
                         "type": "string"
@@ -7882,7 +7932,10 @@
                         "type": "string"
                     },
                     "actor_id": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "subject": {
                         "type": [
@@ -7891,10 +7944,16 @@
                         ],
                         "properties": {
                             "type": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             },
                             "id": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             }
                         },
                         "required": [
@@ -7903,10 +7962,17 @@
                         ]
                     },
                     "context": {
-                        "type": "string"
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {}
                     },
                     "ip_address": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "created_at": {
                         "type": "string"
@@ -7960,10 +8026,16 @@
                         "type": "string"
                     },
                     "email": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "phone": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "status": {
                         "type": "string"
@@ -8005,10 +8077,16 @@
                         "type": "string"
                     },
                     "email": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "phone": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "status": {
                         "type": "string"
@@ -8075,48 +8153,59 @@
                         "type": "string"
                     },
                     "trial_days": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "uses_shared_plans": {
-                        "type": "string"
+                        "type": "boolean"
                     },
                     "plans_count": {
                         "type": "integer"
                     },
                     "latest_version": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "Remote config \u2014 what the app fetches at startup."
                     },
                     "api_base_url": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "downloads": {
-                        "type": "string"
-                    },
-                    "update_notes": {
                         "anyOf": [
                             {
-                                "type": "string"
+                                "type": "array",
+                                "items": {}
                             },
                             {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                },
-                                "minItems": 0,
-                                "maxItems": 0,
-                                "additionalItems": false
+                                "type": "string"
                             }
                         ]
                     },
+                    "update_notes": {
+                        "type": "array",
+                        "items": {}
+                    },
                     "support_email": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "support_whatsapp": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "support_telegram": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 },
                 "required": [
@@ -8143,13 +8232,16 @@
                         "type": "string"
                     },
                     "app_name": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "scope": {
                         "type": "string"
                     },
                     "active_only": {
-                        "type": "string"
+                        "type": "boolean"
                     },
                     "title": {
                         "type": "string"
@@ -8161,13 +8253,19 @@
                         "type": "string"
                     },
                     "recipients": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "target_device_id": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "sent_by_name": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "created_at": {
                         "type": "string"
@@ -8208,10 +8306,13 @@
                         "type": "string"
                     },
                     "description": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "duration_months": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "price": {
                         "type": "number"
@@ -8223,13 +8324,13 @@
                         ]
                     },
                     "enabled": {
-                        "type": "string"
+                        "type": "boolean"
                     },
                     "recommended": {
-                        "type": "string"
+                        "type": "boolean"
                     },
                     "sort_order": {
-                        "type": "string"
+                        "type": "integer"
                     }
                 },
                 "required": [
@@ -8248,13 +8349,132 @@
                 "title": "DevicePlanResource"
             },
             "DeviceSubscription": {
-                "type": "array",
-                "items": {
-                    "type": "string"
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "app_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "device_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "full_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_verified": {
+                        "type": "boolean"
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "plan_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "fcm_token": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "stars": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "comment": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "requested_plan": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "contact_method": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "trial_expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    }
                 },
-                "minItems": 0,
-                "maxItems": 0,
-                "additionalItems": false,
+                "required": [
+                    "id",
+                    "uuid",
+                    "app_name",
+                    "device_id",
+                    "full_name",
+                    "phone",
+                    "is_verified",
+                    "expires_at",
+                    "plan_id",
+                    "fcm_token",
+                    "stars",
+                    "comment",
+                    "created_at",
+                    "updated_at",
+                    "status",
+                    "requested_plan",
+                    "contact_method",
+                    "trial_expires_at"
+                ],
                 "title": "DeviceSubscription"
             },
             "DeviceSubscriptionResource": {
@@ -8264,19 +8484,31 @@
                         "type": "string"
                     },
                     "app_name": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "device_id": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "full_name": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "phone": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "is_verified": {
-                        "type": "string"
+                        "type": "boolean"
                     },
                     "is_active": {
                         "type": "boolean"
@@ -8285,7 +8517,10 @@
                         "type": "boolean"
                     },
                     "plan_id": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "expires_at": {
                         "type": "string"
@@ -8294,20 +8529,35 @@
                         "type": "string"
                     },
                     "status": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "The open purchase intent the operator acts on (see the console)."
                     },
                     "requested_plan": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "contact_method": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "stars": {
-                        "type": "string"
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     },
                     "comment": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "created_at": {
                         "type": "string"
@@ -8348,13 +8598,22 @@
                         "type": "string"
                     },
                     "actor_id": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "ip_address": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "user_agent": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "created_at": {
                         "type": "string"
@@ -8512,7 +8771,8 @@
                                         "type": "string"
                                     },
                                     "name": {
-                                        "type": "string"
+                                        "type": "array",
+                                        "items": {}
                                     }
                                 },
                                 "required": [
@@ -8607,7 +8867,10 @@
                         "type": "string"
                     },
                     "name": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "is_active": {
                         "type": "boolean"
@@ -8647,7 +8910,7 @@
                         "type": "string"
                     },
                     "max_activations": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "activations_used": {
                         "type": "integer"
@@ -8704,7 +8967,8 @@
                                         "type": "string"
                                     },
                                     "name": {
-                                        "type": "string"
+                                        "type": "array",
+                                        "items": {}
                                     }
                                 },
                                 "required": [
@@ -8947,7 +9211,10 @@
                         "type": "string"
                     },
                     "reference": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "paid_at": {
                         "type": "string"
@@ -8971,7 +9238,8 @@
                         "type": "string"
                     },
                     "name": {
-                        "type": "string"
+                        "type": "array",
+                        "items": {}
                     },
                     "price": {
                         "type": "number"
@@ -8983,10 +9251,14 @@
                         "type": "string"
                     },
                     "features": {
-                        "type": "string"
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {}
                     },
                     "is_popular": {
-                        "type": "string"
+                        "type": "boolean"
                     }
                 },
                 "required": [
@@ -9077,7 +9349,7 @@
                         "type": "string"
                     },
                     "max_activations": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "activations_used": {
                         "type": "string"
@@ -9115,22 +9387,35 @@
                         "type": "string"
                     },
                     "name": {
-                        "type": "string"
+                        "type": "array",
+                        "items": {}
                     },
                     "tagline": {
-                        "type": "string"
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {}
                     },
                     "description": {
-                        "type": "string"
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {}
                     },
                     "icon": {
                         "type": "string"
                     },
                     "platforms": {
-                        "type": "string"
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {}
                     },
                     "is_featured": {
-                        "type": "string"
+                        "type": "boolean"
                     },
                     "plans": {
                         "type": "array",
@@ -9230,10 +9515,16 @@
                         "type": "string"
                     },
                     "name": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "notes": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "status": {
                         "type": "string"
@@ -9260,7 +9551,8 @@
                                 "type": "string"
                             },
                             "name": {
-                                "type": "string"
+                                "type": "array",
+                                "items": {}
                             }
                         },
                         "required": [
@@ -9542,7 +9834,10 @@
                                 "type": "string"
                             },
                             "value": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             }
                         },
                         "required": [
@@ -9557,7 +9852,7 @@
                         "type": "string"
                     },
                     "auto_renew": {
-                        "type": "string"
+                        "type": "boolean"
                     },
                     "price": {
                         "type": "number"
@@ -9596,7 +9891,8 @@
                                 "type": "string"
                             },
                             "name": {
-                                "type": "string"
+                                "type": "array",
+                                "items": {}
                             },
                             "billing_period": {
                                 "type": "string"
@@ -9608,7 +9904,8 @@
                                         "type": "string"
                                     },
                                     "name": {
-                                        "type": "string"
+                                        "type": "array",
+                                        "items": {}
                                     }
                                 },
                                 "required": [
@@ -9926,7 +10223,10 @@
                 "type": "object",
                 "properties": {
                     "id": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "name": {
                         "type": "string"
