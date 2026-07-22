@@ -181,6 +181,37 @@ class ArtifactImportTest extends TestCase
         $this->assertSame(2, $release->artifacts()->count());
     }
 
+    public function test_it_reimports_a_slot_whose_previous_build_was_deleted(): void
+    {
+        $this->actAsStaff();
+        $release = Release::factory()->create();
+
+        // First build for this slot, then remove it. The artifact soft-deletes,
+        // so its row survives in the unique index on (release, platform, variant).
+        $this->stage('app.apk', 'first');
+        $this->postJson("/api/v1/releases/{$release->uuid}/artifacts/import", [
+            'filename' => 'app.apk',
+            'platform' => Platform::Android->value,
+            'variant' => 'armeabi-v7a',
+        ])->assertCreated();
+
+        Artifact::query()->firstOrFail()->delete();
+
+        // Re-importing the same slot must resurrect that row, not collide with the
+        // still-present index entry (the production 1062 this test pins down).
+        $this->stage('app.apk', 'second');
+        $this->postJson("/api/v1/releases/{$release->uuid}/artifacts/import", [
+            'filename' => 'app.apk',
+            'platform' => Platform::Android->value,
+            'variant' => 'armeabi-v7a',
+        ])->assertCreated();
+
+        $this->assertSame(1, $release->artifacts()->count());
+        $artifact = $release->artifacts()->firstOrFail();
+        $this->assertNull($artifact->deleted_at);
+        $this->assertSame(hash('sha256', 'second'), $artifact->checksum_sha256);
+    }
+
     public function test_it_requires_authentication(): void
     {
         $release = Release::factory()->create();

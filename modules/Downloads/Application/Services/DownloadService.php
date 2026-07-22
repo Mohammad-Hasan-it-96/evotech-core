@@ -273,25 +273,43 @@ final class DownloadService
 
         $path = (string) Storage::disk($disk)->putFile($directory, new File($localPath));
 
+        // The unique index on (release_id, platform, variant) does not carry
+        // deleted_at, so a *soft-deleted* build of this slot still occupies it.
+        // Look with `withTrashed()` and resurrect that row — a plain
+        // updateOrCreate would miss it (SoftDeletes scope) and then collide with
+        // the surviving index entry on insert.
         $existing = $release->artifacts()
+            ->withTrashed()
             ->where('platform', $platform->value)
             ->where('variant', $variant)
             ->first();
 
-        $oldDisk = $existing?->disk;
-        $oldPath = $existing?->path;
+        // Only a live row has a file worth cleaning up; a trashed row's file was
+        // already removed when it was deleted.
+        $oldDisk = $existing !== null && ! $existing->trashed() ? $existing->disk : null;
+        $oldPath = $existing !== null && ! $existing->trashed() ? $existing->path : null;
 
-        $artifact = $release->artifacts()->updateOrCreate(
-            ['platform' => $platform->value, 'variant' => $variant],
-            [
-                'disk' => $disk,
-                'path' => $path,
-                'filename' => $filename,
-                'size' => $size,
-                'checksum_sha256' => $checksum,
-                'content_type' => $contentType,
-            ],
-        );
+        $attributes = [
+            'disk' => $disk,
+            'path' => $path,
+            'filename' => $filename,
+            'size' => $size,
+            'checksum_sha256' => $checksum,
+            'content_type' => $contentType,
+        ];
+
+        if ($existing !== null) {
+            $existing->fill($attributes);
+            $existing->deleted_at = null;
+            $existing->save();
+            $artifact = $existing;
+        } else {
+            $artifact = $release->artifacts()->create([
+                'platform' => $platform->value,
+                'variant' => $variant,
+                ...$attributes,
+            ]);
+        }
 
         if ($oldPath !== null && $oldPath !== $path) {
             Storage::disk((string) $oldDisk)->delete($oldPath);
