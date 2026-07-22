@@ -3,6 +3,7 @@
 namespace Modules\Downloads\Application\Services;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Modules\Core\Domain\Contracts\AuditLogger;
 use Modules\Downloads\Application\DTO\IssuedDownloadLink;
+use Modules\Downloads\Domain\ArtifactFormats;
 use Modules\Downloads\Domain\Enums\Platform;
 use Modules\Downloads\Domain\Enums\ReleaseChannel;
 use Modules\Downloads\Domain\Enums\ReleaseStatus;
@@ -106,6 +108,22 @@ final class DownloadService
         return $release;
     }
 
+    /**
+     * Bring an archived release back, as a draft.
+     *
+     * Back to *draft* rather than straight to published, even though most
+     * archived releases were published once: restoring is undoing a mistake, and
+     * the mistake is often archiving the wrong row. Landing in draft means that
+     * slip cannot silently republish a build to every device on the public
+     * download URL — re-publishing stays the deliberate act it is everywhere else.
+     */
+    public function unarchive(Release $release): Release
+    {
+        $release->update(['status' => ReleaseStatus::Draft]);
+
+        return $release;
+    }
+
     public function deleteRelease(Release $release): void
     {
         foreach ($release->artifacts()->get() as $artifact) {
@@ -127,17 +145,134 @@ final class DownloadService
         string $variant = '',
         ?string $actorId = null,
     ): Artifact {
+        $artifact = $this->persistArtifact(
+            $release,
+            (string) $file->getRealPath(),
+            $file->getClientOriginalName(),
+            $platform,
+            $variant,
+        );
+
+        $this->audit->log('artifact.uploaded', 'artifact', $artifact->uuid, [
+            'release' => $release->uuid,
+            'platform' => $platform->value,
+            'variant' => $variant,
+        ], $actorId);
+
+        return $artifact;
+    }
+
+    /**
+     * Register a build already sitting in the incoming directory.
+     *
+     * The file is copied onto the delivery disk and only then removed from
+     * staging — so a failure part-way leaves the original where the operator put
+     * it, rather than losing a build that took minutes to transfer.
+     */
+    public function importArtifact(
+        Release $release,
+        string $filename,
+        Platform $platform,
+        string $variant = '',
+        ?string $actorId = null,
+    ): Artifact {
+        $source = $this->incomingPath($filename);
+
+        if (! is_file($source)) {
+            throw ValidationException::withMessages([
+                'filename' => 'That file is no longer in the incoming directory.',
+            ]);
+        }
+
+        $artifact = $this->persistArtifact($release, $source, basename($filename), $platform, $variant);
+
+        @unlink($source);
+
+        $this->audit->log('artifact.imported', 'artifact', $artifact->uuid, [
+            'release' => $release->uuid,
+            'platform' => $platform->value,
+            'variant' => $variant,
+            'source' => basename($filename),
+        ], $actorId);
+
+        return $artifact;
+    }
+
+    /**
+     * Builds sitting in the incoming directory, newest first.
+     *
+     * Only files the artifact allowlist would accept are listed: a stray `.txt`
+     * or a half-finished transfer is noise an operator would have to reason
+     * about, and offering it only to reject it on submit is worse than not
+     * offering it.
+     *
+     * @return list<array{filename: string, size: int, modified_at: string}>
+     */
+    public function incomingFiles(): array
+    {
+        $directory = Config::string('downloads.incoming_path');
+
+        if (! is_dir($directory)) {
+            return [];
+        }
+
+        $files = [];
+
+        foreach ((array) scandir($directory) as $entry) {
+            if (! is_string($entry) || ! ArtifactFormats::allows($entry)) {
+                continue;
+            }
+
+            $path = $directory.DIRECTORY_SEPARATOR.$entry;
+
+            if (! is_file($path)) {
+                continue;
+            }
+
+            $files[] = [
+                'filename' => $entry,
+                'size' => (int) filesize($path),
+                'modified_at' => Carbon::createFromTimestamp((int) filemtime($path))->toIso8601String(),
+            ];
+        }
+
+        usort($files, fn (array $a, array $b) => strcmp($b['modified_at'], $a['modified_at']));
+
+        return $files;
+    }
+
+    /**
+     * Resolve a name within the incoming directory.
+     *
+     * `basename` strips every directory component, so a crafted `filename` cannot
+     * walk out of the staging folder and register `.env` — or any other file on
+     * the server — as a publicly downloadable artifact.
+     */
+    public function incomingPath(string $filename): string
+    {
+        return Config::string('downloads.incoming_path').DIRECTORY_SEPARATOR.basename($filename);
+    }
+
+    /**
+     * Copy a local file onto the delivery disk and record it, replacing any
+     * existing build of the same platform *and* variant — an arm64 upload must
+     * sit alongside the armeabi one, not replace it.
+     */
+    private function persistArtifact(
+        Release $release,
+        string $localPath,
+        string $filename,
+        Platform $platform,
+        string $variant,
+    ): Artifact {
         $disk = Config::string('downloads.disk');
-        $checksum = (string) hash_file('sha256', (string) $file->getRealPath());
-        $size = (int) $file->getSize();
-        $contentType = $file->getMimeType();
-        $filename = $file->getClientOriginalName();
+        $checksum = (string) hash_file('sha256', $localPath);
+        $size = (int) filesize($localPath);
+        $contentType = (new File($localPath))->getMimeType();
         $directory = "artifacts/{$release->product->slug}/{$release->uuid}";
 
-        $path = (string) $file->store($directory, $disk);
+        $path = (string) Storage::disk($disk)->putFile($directory, new File($localPath));
 
-        // Keyed on platform AND variant: an arm64 upload must sit alongside the
-        // armeabi one, not replace it.
         $existing = $release->artifacts()
             ->where('platform', $platform->value)
             ->where('variant', $variant)
@@ -161,12 +296,6 @@ final class DownloadService
         if ($oldPath !== null && $oldPath !== $path) {
             Storage::disk((string) $oldDisk)->delete($oldPath);
         }
-
-        $this->audit->log('artifact.uploaded', 'artifact', $artifact->uuid, [
-            'release' => $release->uuid,
-            'platform' => $platform->value,
-            'variant' => $variant,
-        ], $actorId);
 
         return $artifact;
     }

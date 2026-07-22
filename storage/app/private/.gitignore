@@ -1,2 +1,9 @@
 *
 !.gitignore
+# The staging directory operators drop large builds into must exist on a fresh
+# deploy — it is where they upload *to*, so it cannot be created on first use.
+!downloads/
+downloads/*
+!downloads/incoming/
+downloads/incoming/*
+!downloads/incoming/.gitignore

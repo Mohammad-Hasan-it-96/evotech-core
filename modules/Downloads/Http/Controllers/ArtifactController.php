@@ -12,6 +12,7 @@ use Modules\Downloads\Domain\Enums\Platform;
 use Modules\Downloads\Domain\Models\Artifact;
 use Modules\Downloads\Domain\Models\Release;
 use Modules\Downloads\Http\Concerns\ResolvesActor;
+use Modules\Downloads\Http\Requests\ImportArtifactRequest;
 use Modules\Downloads\Http\Requests\UploadArtifactRequest;
 use Modules\Downloads\Http\Resources\ArtifactResource;
 
@@ -41,6 +42,38 @@ final class ArtifactController extends ApiController
         $artifact = $this->downloads->storeArtifact(
             $release,
             $file,
+            Platform::from((string) $request->string('platform')),
+            $request->variant(),
+            $this->actorId($request),
+        );
+
+        return ArtifactResource::make($artifact)->response()->setStatusCode(201);
+    }
+
+    /**
+     * Builds staged on the server, awaiting registration.
+     *
+     * Not scoped to a release: a file in the incoming directory has no release
+     * yet — choosing one is the point of the import step.
+     */
+    public function incoming(): JsonResponse
+    {
+        return $this->ok($this->downloads->incomingFiles());
+    }
+
+    /**
+     * Register a staged build as an artifact of this release.
+     *
+     * The counterpart to `store` for files too large to upload through the CDN,
+     * whose origin timeout is measured against the whole request body. Same
+     * validation, same storage, same ledger — only the delivery of the bytes to
+     * the server differs.
+     */
+    public function import(ImportArtifactRequest $request, Release $release): JsonResponse
+    {
+        $artifact = $this->downloads->importArtifact(
+            $release,
+            $request->filename(),
             Platform::from((string) $request->string('platform')),
             $request->variant(),
             $this->actorId($request),
