@@ -1,7 +1,8 @@
 # EVOTECH Platform — Roadmap
 
 > The project's official roadmap. Read alongside the binding constitution [`ARCHITECTURE.md`](./ARCHITECTURE.md).
-> **Last updated:** 2026-07-11 · **Status:** Phases 0–5 complete & verified; Phase 6 in progress — the **Download Center** is done & verified. *(Phase 5's live Stripe adapter is scaffolded per [ADR 0009](adr/0009-stripe-live-gateway.md) — enabling it in production needs credentials + a webhook-security review.)*
+> **Last updated:** 2026-07-22 · **Status:** Phases 0–5 complete & verified; Phase 6 in progress — the **Download Center** is done & verified (now with per-platform variants + server-side artifact import); **Phase 7 (App APIs & Fawateer go-live) in progress** — Fawateer's Android builds are shippable through the Download Center; the remaining work is repointing the shipped app's config source at the live API. *(Phase 5's live Stripe adapter is scaffolded per [ADR 0009](adr/0009-stripe-live-gateway.md) — enabling it in production needs credentials + a webhook-security review.)*
+> **~263 backend test methods** across 15 modules.
 
 ---
 
@@ -82,11 +83,12 @@ Connect the real EVOTECH products to the platform: license issue/activate/revoke
 Download Center, IoT / smart controllers, future SaaS products — per the constitution's module list.
 
 - **API — `Downloads`** module ([ADR 0008](adr/0008-download-center-delivery.md)): the **Download Center** — where products publish versioned artifacts and **self-update**. ✅
-  - **Releases & artifacts**: a versioned release of a product on a channel (`stable`/`beta`/`alpha`) groups one artifact per platform; staff CRUD + publish/archive, publish requires ≥1 artifact. Uploads are content-MIME-detected and **SHA-256 checksummed** (§16.7). ✅
-  - **Private storage + signed delivery**: artifacts live on a private disk (`s3`-ready by env), delivered only via **short-lived signed URLs** — never a public path; expired/tampered links `403`. Every link minted is recorded to an immutable `download_events` ledger. ✅
+  - **Releases & artifacts**: a versioned release of a product on a channel (`stable`/`beta`/`alpha`) groups **one artifact per platform *and variant*** — Android's `arm64-v8a` / `armeabi-v7a` sit side by side, a universal build is the empty-variant `default`. Staff CRUD + publish/**archive**/**unarchive** (an archived release can be restored to draft and re-published), publish requires ≥1 artifact. Uploads are content-MIME-detected and **SHA-256 checksummed** (§16.7). ✅
+  - **Two ingest paths**: a normal multipart **upload** for small builds, and a **server-side import** (`GET /artifacts/incoming` + `POST /releases/{release}/artifacts/import`) for large ones — an operator drops the file into `storage/app/private/downloads/incoming/` (SFTP / File Manager) and registers it without the bytes crossing the CDN. Import shares the upload's allowlist + checksum and is path-traversal guarded (`basename`). *(See "Known limitations" — this exists because a browser upload cannot survive Cloudflare's 100 s origin timeout on the current uplink.)* ✅
+  - **Private storage + signed delivery**: artifacts live on a private disk (`s3`-ready by env), delivered via **short-lived signed URLs** — never a public path; expired/tampered links `403`. There is also a **permanent public `downloads.latest` route** that resolves to whatever is currently published (for config files apps cache and keep on-device for weeks). Every link minted is recorded to an immutable `download_events` ledger. ✅
   - **Product self-update** (`auth:product`, ADR 0004): `GET /api/v1/product/releases/latest` (auto-update check) + a scoped signed-link endpoint; a product only ever sees its own product's artifacts (cross-product `404`). ✅
-  - Docs: [`docs/modules/downloads.md`](modules/downloads.md). Quality: **121 backend tests**, Larastan max, Pint, OpenAPI regenerated.
-- **API — `DeviceSubscriptions`** module ([ADR 0010](adr/0010-device-subscriptions-module.md)): device-keyed subscriptions for **shipped consumer apps** (subscriber = a **device**, not a Company) — the successor to the legacy SmartAgent backend. Scaffolded: legacy `/api/*` compatibility shim + versioned twins, non-tenant, push port, legacy import command. Docs: [`docs/modules/DeviceSubscriptions.md`](modules/DeviceSubscriptions.md). 🚧 *Cutover pending.*
+  - Docs: [`docs/modules/downloads.md`](modules/downloads.md). Quality: **41 module test methods**, Larastan max, Pint, OpenAPI regenerated.
+- **API — `DeviceSubscriptions`** module ([ADR 0010](adr/0010-device-subscriptions-module.md)): device-keyed subscriptions for **shipped consumer apps** (subscriber = a **device**, not a Company) — the successor to the legacy SmartAgent backend. Legacy `/api/*` compatibility shim + versioned twins, non-tenant. Built out considerably since scaffolding: **remote-config generation** (`GET /api/{slug}/remote-config` builds the startup payload from the `device_apps` row rather than a hand-edited Drive JSON — `latest_version`, per-ABI download links derived from the Download Center, update notes, support channels, all shaped to the shipped parsers' quirks), a **dashboard catalog editor** (apps + plans, shared vs per-app), **operator fulfilment** (activate/decline/delete a device purchase request), and **real FCM push** per Firebase project. **105 module test methods.** Docs: [`docs/modules/DeviceSubscriptions.md`](modules/DeviceSubscriptions.md). 🚧 *App cutover pending — see Phase 7.*
 - **Remaining in Phase 6:** IoT / smart controllers (largely covered by Phase 4's signed offline tokens + device activation — additive telemetry/firmware channels), future SaaS products.
 
 ### 🚧 Phase 7 — App APIs & Fawateer go-live (in progress)
@@ -103,6 +105,22 @@ only by `app_name`. Go-live is closing a small set of compatibility gaps in
 `DeviceSubscriptions` (partial `update_my_data`, plan requests, `is_trial`, a server-granted
 30-day trial), plus an operator console to fulfil sales.
 
+**Progress (2026-07-22):** Fawateer's Android builds (`arm64-v8a` + `armeabi-v7a`) are now
+published through the Download Center on production, and the remote-config endpoint derives
+their permanent download links automatically. The operator console (activate/decline/delete)
+and the plans/apps catalog editor are live.
+
+**The one blocker left is the config *source cutover*.** The shipped Fawateer build reads its
+startup config from a **static/Drive JSON** (historically `harrypotter.foodsalebot.com` / a
+Google Drive file), *not* from this API's `GET /api/fawateer/remote-config`. Until that source
+is repointed — or the static file is generated from the `device_apps` row and served at the
+URL the app actually fetches — editing `latest_version`/`downloads`/`uses_shared_plans` in the
+dashboard changes the API's answer but **not** what a phone in the field sees. This is exactly
+why publishing "did nothing" and `getPlans` still returned shared plans during testing: two
+config homes, and the app was reading the other one. **Next step:** confirm the URL the current
+build fetches, then either (a) repoint it at `/api/fawateer/remote-config`, or (b) add a job
+that renders the builder's payload to that static location on every catalog change.
+
 ---
 
 ## Execution principle
@@ -111,3 +129,11 @@ Each phase ends with a **demoable/deployable output** before moving on. We work 
 ## Open items carried forward
 - **Deploy Phase 1 website** to the Contabo VPS (needs your VPS/domain access).
 - **PHP 8.4 toolchain upgrade** on the local machine (currently 8.2; Laravel 12 runs fine on 8.2, CI enforces 8.4).
+- **Fawateer config-source cutover** (Phase 7 blocker above) — repoint the shipped app's config URL at `/api/fawateer/remote-config`, or generate the static file from the `device_apps` row.
+
+## Known limitations & recommendations (2026-07-22 review)
+- **Large-build upload ceiling (Cloudflare).** A browser upload to `api.evotech-sys.com` is relayed through Cloudflare, which caps the *whole request body* at a ~100 s origin timeout — on the current uplink that strands any build over ~13 MB (both Fawateer APKs are 25–29 MB) as a `524`. **No origin (PHP/nginx) setting can fix this.** Today's answer is the **server-side import** path (drop the file on the VPS, register via dashboard). *Recommended permanent fix:* presigned **direct-to-object-storage** upload (browser → S3-compatible bucket, bypassing the origin entirely) or a **chunked/resumable** upload endpoint. The import path stays useful either way for ops without a browser.
+- **Soft-delete + unique-index collision (fixed 2026-07-22, [#17]).** `artifacts` is `SoftDeletes` but its unique index on `(release_id, platform, variant)` omits `deleted_at`, so a deleted build kept its slot and re-importing that variant hit a `1062`. `persistArtifact` now resurrects the trashed row. *Recommendation:* audit other `SoftDeletes` models for unique indexes that don't carry `deleted_at` and apply the same `withTrashed()` resurrect-or-create pattern (or a partial index) before they bite in production.
+- **Deploy hygiene.** The auto-deploy **refuses on a dirty server working tree** (by design). A stray file created on the VPS (e.g. via CloudPanel File Manager at the wrong path) silently blocks every deploy with a 5 s failure. *Recommendation:* make the deploy step print the offending `git status --porcelain` lines in the failure message, and document the exact incoming path (`storage/app/private/downloads/incoming/`) so File-Manager uploads land where the importer looks.
+- **Stray root files.** Three 0-byte files have reached the repo root from over-broad `git add -A`/shell-glob mishaps (cleaned in [#16]). *Recommendation:* a tiny CI guard that fails when an unexpected top-level file appears, and prefer explicit `git add <path>` over `-A`.
+- **Version-check is numeric, not semver.** Both shipped apps compare `latest_version` component-wise as integers (`int.tryParse(part) ?? 0`); a `-beta`/`+build` suffix reads as `0` and can hide an update forever. The request layer already enforces digits-and-dots — keep it that way, and remember the Flutter `pubspec` build number (`+N`) is **not** part of this string.
