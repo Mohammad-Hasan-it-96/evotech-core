@@ -44,6 +44,12 @@ auth.json
 Thumbs.db
 desktop.ini
 
+# Database dumps — contain real customer PII (names, phones, FCM tokens).
+# Never commit these to the repo (it deploys to prod and lives on GitHub).
+docs/database/*.sql
+*.sql.gz
+/*_dump*.sql
+
 # AI tooling runtime/state (local — not project config)
 /.claude-flow/
 /.hive-mind/
