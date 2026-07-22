@@ -356,3 +356,72 @@ on the same day.
 One caveat specific to SmartAgent: **it has no trial** (deliberately — its owner never
 asked for one). So a SmartAgent user missing from the import is locked out **immediately**,
 with no 30-day grace to hide it. The import matters more there, not less.
+
+### 7.1 The SmartAgent cutover — exact procedure (verified 2026-07-22)
+
+The 51 legacy rows were imported into `device_subscriptions` and verified through the live
+shim: a real paid device returns its **original** expiry (`is_verified:1, plan:yearly,
+expires_at:2027-…`), not a fresh trial. The namespaced surface `…/api/smartagent/*`
+(`getPlans`, `check_device`, `app-download`, `remote-config`) all answer with the exact
+legacy shapes. The data and the endpoints are ready; what remains is the deliberate flip.
+
+#### ⚠️ SmartAgent's `base_url` parser is destructive
+
+Unlike Fawateer (which keeps its current server when `base_url` is blank), **SmartAgent
+*resets* its server to whatever `api_base_url` says the moment it reads a remote-config.**
+This is why the seed migration deliberately leaves `api_base_url` as the **legacy**
+`https://harrypotter.foodsalebot.com/api`: while it says that, a build reading the new
+config changes nothing. Flipping this field **is** the cutover for any build that reads the
+new server's config. It is safe to change now because **no shipped build reads the new
+`remote-config` yet** — shipped builds read a hardcoded Google Drive JSON — so the change is
+inert for the field until you point a build at `/config/smartagent.json`.
+
+#### Exact Device App config (dashboard → Device Apps → SmartAgent)
+
+Change **one** field; leave everything else as seeded.
+
+| Field | Value |
+|---|---|
+| **`api_base_url`** | `https://api.evotech-sys.com/api/smartagent` ← **the only change** |
+| `latest_version` | `1.1.1` *(unchanged)* |
+| `downloads.arm64-v8a` | `https://harrypotter.foodsalebot.com/downloads/app-arm64-v8a-release.apk` *(unchanged for now — the old host still serves these; move to the Download Center later)* |
+| `downloads.armeabi-v7a` | `https://harrypotter.foodsalebot.com/downloads/app-armeabi-v7a-release.apk` *(unchanged for now)* |
+| `update_notes` | the 3 Arabic lines *(unchanged)* |
+| `support_email` | `smart.agent.app.support@gmail.com` *(unchanged)* |
+| `support_whatsapp` | `963959027196` *(unchanged)* |
+| `support_telegram` | `https://t.me/+963959027196` *(unchanged)* |
+
+`…/api/smartagent` (namespaced) over `…/api` (shared): it isolates SmartAgent, matches the
+probed surface, and future-proofs per-app plans. The app appends `/check_device` etc., so it
+resolves to `…/api/smartagent/check_device`, which is live.
+
+Confirm after saving:
+```bash
+curl -s https://api.evotech-sys.com/api/smartagent/remote-config   # api.base_url → …/api/smartagent
+```
+
+#### Trial one device before flipping the shared Drive JSON
+
+The shared Drive JSON cannot single out one device — every build reads the same file. So the
+one-device trial is a **test build** with its base URL pointed at
+`https://api.evotech-sys.com/api/smartagent` (a build constant, or reading
+`/config/smartagent.json`), installed on your phone only. Because `api_base_url` now says the
+new server, that build **stays** on the new server instead of resetting back to harrypotter.
+Every shipped device keeps reading the Drive JSON → old server, untouched. Live on it for a
+day.
+
+#### The flip sequence (only after the trial passes)
+
+1. **Fresh re-import** right before flipping — re-export `app_harfoshs` and re-run the
+   **upsert** file (`device_subscriptions_import.sql`); the earlier snapshot has drifted as
+   new devices registered on the old server.
+2. **Flip the Drive JSON** base URL → `https://api.evotech-sys.com/api/smartagent`.
+   Do it **after midnight (local)** — low traffic means fewer devices caught mid-propagation
+   and fewer registrations landing on the old server during the window.
+3. **Wait ~24 h** for the config cache to propagate; the old server goes quiet.
+4. **Run the catch-up file** (`device_subscriptions_catchup.sql`, **INSERT IGNORE**) once —
+   it adds only devices missing from the new server and never overwrites a device already
+   active there. Then stop importing; the new server is authoritative.
+
+> **Never flip Fawateer and SmartAgent on the same day** (§7) — separate remote-config files
+> exist precisely so a bad cutover stays contained to one product.
