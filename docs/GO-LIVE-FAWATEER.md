@@ -422,6 +422,13 @@ day.
 4. **Run the catch-up file** (`device_subscriptions_catchup.sql`, **INSERT IGNORE**) once —
    it adds only devices missing from the new server and never overwrites a device already
    active there. Then stop importing; the new server is authoritative.
+5. **Kill the old server's notification cron** (`plans:send-notifications` on harrypotter).
+   Both backends hold the same live FCM tokens, so until this cron dies every SmartAgent
+   user at a reminder mark (7/3/1 days, expired) gets **two** pushes a day — one from each
+   server. During the pre-flip window that duplication is accepted deliberately (silencing
+   our sweep would also silence Fawateer's only reminders); after the flip the old cron has
+   no remaining job. Leave the old *server* itself up (read-only) until the catch-up import
+   has run — only the cron stops.
 
 > **Never flip Fawateer and SmartAgent on the same day** (§7) — separate remote-config files
 > exist precisely so a bad cutover stays contained to one product.
