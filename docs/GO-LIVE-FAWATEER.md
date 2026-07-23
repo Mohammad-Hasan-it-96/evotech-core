@@ -415,6 +415,15 @@ day.
 1. **Fresh re-import** right before flipping — re-export `app_harfoshs` and re-run the
    **upsert** file (`device_subscriptions_import.sql`); the earlier snapshot has drifted as
    new devices registered on the old server.
+   **Exclude the Fawateer rows from the re-export** (`WHERE app_name != 'Fawateer'`). They
+   are test devices (§2), and a device can exist in both worlds — registered fresh here
+   with a trial *and* sitting in the legacy dump. The 2026-07-22 import proved what that
+   collision does: the legacy row's `NULL expires_at` overwrote the trial's expiry, and a
+   NULL expiry means *lifetime*, so the device became verified forever. The schema now
+   rejects that write outright (`chk_trial_rows_keep_expiry`, MySQL CHECK) — meaning an
+   unfiltered import will **fail loudly** on such rows rather than corrupt them. Prefer
+   the guarded `device-subscriptions:import-legacy` command where possible: it resolves
+   the collision instead of erroring (profile refreshes, subscription untouched).
 2. **Flip the Drive JSON** base URL → `https://api.evotech-sys.com/api/smartagent`.
    Do it **after midnight (local)** — low traffic means fewer devices caught mid-propagation
    and fewer registrations landing on the old server during the window.
