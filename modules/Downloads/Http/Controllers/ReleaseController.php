@@ -66,7 +66,11 @@ final class ReleaseController extends ApiController
 
     public function publish(Request $request, Release $release): ReleaseResource
     {
-        return $this->present($this->downloads->publish($release, $this->actorId($request)));
+        return $this->present($this->downloads->publish(
+            $release,
+            $this->actorId($request),
+            $request->boolean('sync_app_version'),
+        ));
     }
 
     public function archive(Request $request, Release $release): ReleaseResource

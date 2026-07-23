@@ -5,11 +5,13 @@ namespace Modules\Downloads\Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Modules\Downloads\Domain\Enums\Platform;
 use Modules\Downloads\Domain\Enums\ReleaseStatus;
+use Modules\Downloads\Domain\Events\ReleasePublished;
 use Modules\Downloads\Domain\Models\Artifact;
 use Modules\Downloads\Domain\Models\Release;
 use Modules\Products\Domain\Models\Product;
@@ -108,6 +110,40 @@ class ReleaseManagementTest extends TestCase
             ->assertJsonPath('data.status', ReleaseStatus::Published->value);
 
         $this->assertNotNull($release->refresh()->published_at);
+    }
+
+    public function test_publishing_can_request_an_app_version_sync(): void
+    {
+        Event::fake([ReleasePublished::class]);
+        $this->actAsStaff();
+        $release = Release::factory()->create(['version' => '1.0.1']);
+        Artifact::factory()->create(['release_id' => $release->id]);
+
+        $this->postJson("/api/v1/releases/{$release->uuid}/publish", [
+            'sync_app_version' => true,
+        ])->assertOk();
+
+        Event::assertDispatched(
+            ReleasePublished::class,
+            fn (ReleasePublished $event): bool => $event->version === '1.0.1'
+                && $event->productSlug === $release->product->slug
+                && $event->syncAppVersion === true,
+        );
+    }
+
+    public function test_publishing_without_the_flag_does_not_request_a_sync(): void
+    {
+        Event::fake([ReleasePublished::class]);
+        $this->actAsStaff();
+        $release = Release::factory()->create();
+        Artifact::factory()->create(['release_id' => $release->id]);
+
+        $this->postJson("/api/v1/releases/{$release->uuid}/publish")->assertOk();
+
+        Event::assertDispatched(
+            ReleasePublished::class,
+            fn (ReleasePublished $event): bool => $event->syncAppVersion === false,
+        );
     }
 
     public function test_an_archived_release_can_be_restored_and_published_again(): void
