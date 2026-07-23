@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Modules\Core\Domain\Concerns\HasUuid;
 use Modules\DeviceSubscriptions\Database\Factories\DeviceSubscriptionFactory;
 
@@ -102,6 +103,40 @@ class DeviceSubscription extends Model
             'trial_expires_at' => 'datetime',
             'stars' => 'integer',
         ];
+    }
+
+    /**
+     * Invariant: a trial row must carry its expiry.
+     *
+     * `expires_at = NULL` means "lifetime" ([isActive]), so a trial row that
+     * loses its expiry becomes verified forever — which is exactly what the
+     * 2026-07-22 legacy import did to a device that had already self-registered
+     * here: the upsert overwrote `expires_at` with the legacy row's NULL while
+     * `trial_expires_at` (not an import column) survived. These guards make the
+     * state unrepresentable through Eloquent (saving) and invisible even when a
+     * raw-SQL import slips it into the table (retrieved, in-memory until the row
+     * is next written). MySQL enforces the same rule at the schema level via a
+     * CHECK constraint, so a hand-run import fails loudly instead.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $device): void {
+            if ($device->trial_expires_at !== null && $device->plan_id === null && $device->expires_at === null) {
+                $device->expires_at = $device->trial_expires_at;
+
+                Log::warning('DeviceSubscription: restored a trial expiry that a write tried to clear.', [
+                    'app_name' => $device->app_name,
+                    'device_id' => $device->device_id,
+                    'trial_expires_at' => $device->trial_expires_at->toIso8601String(),
+                ]);
+            }
+        });
+
+        static::retrieved(function (self $device): void {
+            if ($device->trial_expires_at !== null && $device->plan_id === null && $device->expires_at === null) {
+                $device->expires_at = $device->trial_expires_at;
+            }
+        });
     }
 
     /**

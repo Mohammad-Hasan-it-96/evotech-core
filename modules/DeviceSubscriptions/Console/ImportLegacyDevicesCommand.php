@@ -58,20 +58,45 @@ class ImportLegacyDevicesCommand extends Command
                     return;
                 }
 
+                $attributes = [
+                    'full_name' => $row->full_name ?? null,
+                    'phone' => $row->phone ?? null,
+                    'is_verified' => (bool) ($row->is_verified ?? false),
+                    'expires_at' => $row->expires_at ?? null,
+                    'plan_id' => $row->plan_id ?? null,
+                    'fcm_token' => $row->fcm_token ?? null,
+                    'stars' => $row->stars ?? null,
+                    'comment' => $row->comment ?? null,
+                    'created_at' => $row->created_at ?? null,
+                    'updated_at' => $row->updated_at ?? null,
+                ];
+
+                /*
+                 * A device can exist in both worlds: registered fresh here (and
+                 * granted a trial) AND present in the legacy dump. When the legacy
+                 * row carries no subscription of its own (no plan, no expiry),
+                 * letting it overwrite the subscription fields erased the trial's
+                 * expiry — and a NULL expiry means "lifetime", so the device
+                 * became verified forever (the 2026-07-22 production incident).
+                 * Such a row may still refresh the profile; it must not touch the
+                 * subscription. Legacy rows carrying real paid data still win.
+                 */
+                $existing = DeviceSubscription::query()
+                    ->where('app_name', $appName)
+                    ->where('device_id', $deviceId)
+                    ->first();
+
+                if (
+                    $existing?->trial_expires_at !== null
+                    && $attributes['plan_id'] === null
+                    && $attributes['expires_at'] === null
+                ) {
+                    unset($attributes['is_verified'], $attributes['expires_at'], $attributes['plan_id']);
+                }
+
                 DeviceSubscription::query()->updateOrCreate(
                     ['app_name' => $appName, 'device_id' => $deviceId],
-                    [
-                        'full_name' => $row->full_name ?? null,
-                        'phone' => $row->phone ?? null,
-                        'is_verified' => (bool) ($row->is_verified ?? false),
-                        'expires_at' => $row->expires_at ?? null,
-                        'plan_id' => $row->plan_id ?? null,
-                        'fcm_token' => $row->fcm_token ?? null,
-                        'stars' => $row->stars ?? null,
-                        'comment' => $row->comment ?? null,
-                        'created_at' => $row->created_at ?? null,
-                        'updated_at' => $row->updated_at ?? null,
-                    ],
+                    $attributes,
                 );
                 $imported++;
             }
