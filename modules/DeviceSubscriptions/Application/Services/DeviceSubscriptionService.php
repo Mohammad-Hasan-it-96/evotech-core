@@ -226,11 +226,16 @@ final class DeviceSubscriptionService
         DeviceActivated::dispatch($device);
 
         if ($device->fcm_token) {
+            // Legacy parity: name the plan that was switched on (the catalog title
+            // the customer saw when buying), falling back to the raw id for a plan
+            // the catalog no longer lists.
+            $planTitle = $this->plans->title($planId, $device->app_name) ?? $planId;
+
             $this->push->send(
                 (string) $device->app_name,
                 $device->fcm_token,
                 '🎉 تم تفعيل اشتراكك بنجاح!',
-                "أهلاً {$device->full_name}! تم تفعيل خطّتك بنجاح ✅\nتنتهي بتاريخ: {$expiresAt->format('Y/m/d')}",
+                "أهلاً {$device->full_name}! تم تفعيل خطّتك {$planTitle} بنجاح ✅\nتنتهي بتاريخ: {$expiresAt->format('Y/m/d')}\nنتمنى لك تجربة رائعة معنا 💙",
                 'new_plan_activated',
             );
         }
@@ -316,9 +321,22 @@ final class DeviceSubscriptionService
     }
 
     /**
-     * Send expiry reminders to every device with a push token at the expired / 7 /
-     * 3 / 1-day marks. Backs the scheduled sweep (legacy send_plan_notifications).
+     * Send expiry reminders to every device with a push token at the 7 / 3 /
+     * 1-day marks, on the last day, and for a bounded window after expiry.
+     * Backs the scheduled sweep (legacy SendPlanNotifications command).
      * Returns the number of notifications sent.
+     *
+     * Stage copy mirrors the legacy command's exactly (that wording is what the
+     * shipped apps' users know), with two deliberate deviations:
+     *
+     * - **Per-app label.** One deployment serves several apps, so a Fawateer user
+     *   must not be asked to renew "المندوب الذكي".
+     * - **The expired notice stops after day −3** (as the legacy *command* did —
+     *   the legacy HTTP endpoint variant nagged every expired device daily,
+     *   forever). Day 0 is included: the "last day" send, in legacy's own
+     *   semantics. Unlike legacy, nothing is written back to `is_verified` —
+     *   check_device computes effective verification from `expires_at`, which
+     *   also spares the customer legacy's early lockout on the expiry morning.
      */
     public function sweepExpiryReminders(): int
     {
@@ -333,11 +351,30 @@ final class DeviceSubscriptionService
                 $expiresAt = $device->expires_at;
                 $daysLeft = (int) $now->diffInDays($expiresAt, false);
 
+                $name = (string) $device->full_name;
+                $label = $this->apps->label((string) $device->app_name);
+
                 $message = match (true) {
-                    $daysLeft < 0 => ['🔴 انتهت صلاحية اشتراكك', 'plan_deactivated'],
-                    $daysLeft === 7 => ['📅 اشتراكك ينتهي بعد 7 أيام', 'still_7_days'],
-                    $daysLeft === 3 => ['⏳ تبقّى 3 أيام على انتهاء اشتراكك', 'still_3_days'],
-                    $daysLeft === 1 => ['⚠️ آخر يوم في اشتراكك!', 'still_1_day'],
+                    $daysLeft <= 0 && $daysLeft >= -3 => [
+                        '🔴 انتهت صلاحية اشتراكك',
+                        "عزيزي {$name}، لقد انتهى اشتراكك في {$label}. جدّد اشتراكك الآن للاستمرار في استخدام جميع المميزات دون انقطاع. 🙏",
+                        'plan_deactivated',
+                    ],
+                    $daysLeft === 7 => [
+                        '📅 اشتراكك ينتهي بعد 7 أيام',
+                        "مرحباً {$name}! نودّ تذكيرك بأن اشتراكك في {$label} سينتهي خلال أسبوع. جدّد مسبقاً لتستمر في العمل بدون أي توقف. نقدّر ثقتك بنا! 💙",
+                        'still_7_days',
+                    ],
+                    $daysLeft === 3 => [
+                        '⏳ تبقّى 3 أيام على انتهاء اشتراكك',
+                        "تنبيه ودّي يا {$name}! اشتراكك في {$label} سينتهي بعد 3 أيام فقط. لا تدع العمل يتوقف — جدّد الآن بكل سهولة وتابع إنجازاتك. 🚀",
+                        'still_3_days',
+                    ],
+                    $daysLeft === 1 => [
+                        '⚠️ آخر يوم في اشتراكك!',
+                        "اشتراكك في {$label} سينتهي غداً يا {$name}. جدّد الآن حتى لا تفوّتك أي لحظة من عملك. نحن هنا دائماً لخدمتك! 😊",
+                        'still_1_day',
+                    ],
                     default => null,
                 };
 
@@ -345,15 +382,12 @@ final class DeviceSubscriptionService
                     return;
                 }
 
-                [$title, $type] = $message;
-                // Per-app label: one deployment serves several apps, so a Fawateer
-                // user must not be asked to renew "المندوب الذكي".
-                $label = $this->apps->label((string) $device->app_name);
+                [$title, $body, $type] = $message;
                 $this->push->send(
                     (string) $device->app_name,
                     (string) $device->fcm_token,
                     $title,
-                    "عزيزي {$device->full_name}، يرجى تجديد اشتراكك في {$label} للاستمرار دون انقطاع.",
+                    $body,
                     $type,
                 );
                 $sent++;

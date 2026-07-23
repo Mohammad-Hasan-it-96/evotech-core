@@ -49,6 +49,24 @@ final class DevicePlanCatalog
     }
 
     /**
+     * Display title for a plan_id within an app's catalog (e.g. "الخطة السنوية"),
+     * or null if the catalog does not list it. Used by the activation push so the
+     * customer is told *which* plan was switched on, as the legacy backend did.
+     */
+    public function title(?string $planId, ?string $appName = null): ?string
+    {
+        foreach ($this->plans($appName) as $plan) {
+            if (is_array($plan) && ($plan['id'] ?? null) === $planId) {
+                $title = $plan['title'] ?? null;
+
+                return is_string($title) && $title !== '' ? $title : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * An app's plans, falling back to the shared list (defensive against a
      * malformed config).
      *
