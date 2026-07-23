@@ -132,18 +132,22 @@ final class DeviceSubscriptionService
      * blank them (a name edit used to wipe the push token, silently costing the
      * device its live-unlock notification).
      */
-    public function updateProfile(
-        DeviceSubscription $device,
-        ?string $fullName,
-        ?string $phone,
-        ?string $fcmToken,
-    ): void {
-        $changes = self::present([
-            'full_name' => $fullName,
-            'phone' => $phone,
-            'fcm_token' => $fcmToken,
-        ]);
-
+    /**
+     * Apply a partial profile update.
+     *
+     * The **caller** decides which fields were supplied; this applies exactly the
+     * keys it is handed, so a key present with a null value *clears* that column.
+     *
+     * That decision moved out of here deliberately. It used to drop every null,
+     * which made "the app omitted this field" and "the app is clearing this field"
+     * indistinguishable — fine while every field was one the app only ever sets,
+     * and wrong for `google_account`, which a user who signs out of Drive must be
+     * able to unset. Only the layer reading the request can tell those apart.
+     *
+     * @param  array<string, string|null>  $changes
+     */
+    public function updateProfile(DeviceSubscription $device, array $changes): void
+    {
         if ($changes !== []) {
             $device->update($changes);
         }
@@ -151,6 +155,9 @@ final class DeviceSubscriptionService
 
     /**
      * Drop the keys whose value was not supplied.
+     *
+     * Still used by registration, where "omitted" is the only meaning a null can
+     * have — the app never clears a plan request by sending one.
      *
      * @param  array<string, string|null>  $values
      * @return array<string, string>

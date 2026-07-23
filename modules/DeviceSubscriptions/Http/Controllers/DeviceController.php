@@ -100,6 +100,20 @@ final class DeviceController
             'is_trial' => (int) $device->isOnTrial(),
             'plan' => $device->plan_id,
             'expires_at' => $device->expires_at,
+            /*
+             * Masked, never raw — and that is load-bearing, not cosmetic.
+             *
+             * This endpoint is in the legacy shim's public, unauthenticated group,
+             * and a device id is not a secret: the app shows it with a copy button
+             * and tells users to send it to support over WhatsApp. Returning the
+             * real address here would hand anyone holding an id a customer's email.
+             *
+             * The masked form is only a recognition cue for the account's own
+             * owner, who already knows which address it is. If the full address is
+             * ever needed in-app it belongs on the authenticated
+             * /api/v1/device/* twin, not here.
+             */
+            'google_account' => $device->maskedGoogleAccount(),
             'server_time' => Carbon::now()->toISOString(),
         ]);
     }
@@ -120,6 +134,9 @@ final class DeviceController
             'full_name' => 'sometimes|string|max:255',
             'phone' => 'sometimes|string|max:255',
             'fcm_token' => 'sometimes|string',
+            // Nullable, unlike the others: signing out of Drive has to be
+            // expressible, and the app says so by sending an explicit null.
+            'google_account' => 'sometimes|nullable|string|email|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -135,12 +152,35 @@ final class DeviceController
             return $this->notFound();
         }
 
-        $this->devices->updateProfile(
-            $device,
-            $this->optional($request, 'full_name'),
-            $this->optional($request, 'phone'),
-            $this->optional($request, 'fcm_token'),
-        );
+        $changes = [];
+
+        /*
+         * The shipped app sends these either populated or omitted, never null.
+         * Keeping `filled()` semantics means a stray null or empty string cannot
+         * blank a customer's name — which, on a public unauthenticated endpoint,
+         * is worth more than being able to clear them.
+         */
+        foreach (['full_name', 'phone', 'fcm_token'] as $field) {
+            if ($request->filled($field)) {
+                $changes[$field] = (string) $request->string($field);
+            }
+        }
+
+        /*
+         * google_account is the one field that must be clearable — a user who
+         * signs out of Drive genuinely has no account, and that state has to be
+         * recordable. So this reads `exists()`, not `filled()`: an explicit null
+         * is a *value*, and omitting the key is what leaves it alone.
+         */
+        if ($request->exists('google_account')) {
+            $account = $request->input('google_account');
+
+            $changes['google_account'] = is_string($account) && trim($account) !== ''
+                ? trim($account)
+                : null;
+        }
+
+        $this->devices->updateProfile($device, $changes);
 
         return response()->json(['success' => true]);
     }

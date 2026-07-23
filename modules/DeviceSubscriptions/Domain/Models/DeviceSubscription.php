@@ -19,6 +19,7 @@ use Modules\DeviceSubscriptions\Database\Factories\DeviceSubscriptionFactory;
  * @property string|null $device_id
  * @property string|null $full_name
  * @property string|null $phone
+ * @property string|null $google_account
  * @property bool $is_verified
  * @property string|null $status
  * @property Carbon|null $expires_at
@@ -77,6 +78,7 @@ class DeviceSubscription extends Model
         'device_id',
         'full_name',
         'phone',
+        'google_account',
         'is_verified',
         'status',
         'expires_at',
@@ -128,6 +130,57 @@ class DeviceSubscription extends Model
         return $this->trial_expires_at !== null
             && $this->plan_id === null
             && $this->isActive();
+    }
+
+    /**
+     * The Drive backup account, reduced to a recognition cue.
+     *
+     * Keeps the first and last character of the local part plus the domain, and
+     * masks everything between: `sara.backups@gmail.com` → `s••••••••••s@gmail.com`.
+     *
+     * The shape is chosen for what an owner needs to recall *their own* account —
+     * initial, length and provider are enough for that, and none of them identify
+     * them to a stranger. A fixed-length mask would hide marginally more while
+     * making two of a user's own accounts indistinguishable, which defeats the
+     * point of showing anything.
+     *
+     * The domain survives deliberately: Google accounts are overwhelmingly
+     * gmail.com, so it carries little identifying signal while being the one part
+     * that tells a user "this is my personal account, not my work one". A custom
+     * domain does reveal an organisation — the residual risk here, and far smaller
+     * than the address itself.
+     *
+     * A local part of two characters or fewer is masked entirely; there is no way
+     * to show an initial without showing most of it.
+     */
+    public function maskedGoogleAccount(): ?string
+    {
+        $account = $this->google_account;
+
+        if (! is_string($account) || $account === '') {
+            return null;
+        }
+
+        $at = mb_strrpos($account, '@');
+
+        // Not address-shaped. Validation should prevent it, but this feeds a
+        // public surface: degrade to hiding more, never less.
+        if ($at === false || $at === 0) {
+            return mb_substr($account, 0, 1).str_repeat('•', max(1, mb_strlen($account) - 1));
+        }
+
+        $local = mb_substr($account, 0, $at);
+        $domain = mb_substr($account, $at);
+        $length = mb_strlen($local);
+
+        if ($length <= 2) {
+            return str_repeat('•', $length).$domain;
+        }
+
+        return mb_substr($local, 0, 1)
+            .str_repeat('•', $length - 2)
+            .mb_substr($local, -1)
+            .$domain;
     }
 
     /**

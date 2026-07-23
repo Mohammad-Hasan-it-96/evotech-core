@@ -13,6 +13,7 @@ use Modules\DeviceSubscriptions\Domain\Models\DeviceApp;
 use Modules\DeviceSubscriptions\Domain\Models\DevicePlan;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 use Modules\Users\Domain\Models\User;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -204,6 +205,213 @@ class DeviceSubscriptionApiTest extends TestCase
             'phone' => '0777',
             'fcm_token' => 'keep-me',
         ]);
+    }
+
+    /**
+     * The app records which Google account holds the device's Drive backups by
+     * sending google_account alone — the same partial shape it already uses to
+     * rotate its push token.
+     */
+    public function test_update_my_data_accepts_a_google_account_alone(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Sara',
+            'phone' => '0999',
+            'fcm_token' => 'keep-me',
+        ]);
+
+        $this->postJson('/api/update_my_data', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => 'sara.backups@gmail.com',
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'google_account' => 'sara.backups@gmail.com',
+            // Untouched: a partial update must not blank what it did not send.
+            'full_name' => 'Sara',
+            'phone' => '0999',
+            'fcm_token' => 'keep-me',
+        ]);
+    }
+
+    /** A typo'd address would be useless to support and misleading to the user. */
+    public function test_update_my_data_rejects_an_invalid_google_account(): void
+    {
+        DeviceSubscription::factory()->create(['app_name' => 'Fawateer', 'device_id' => 'dev-1']);
+
+        $this->postJson('/api/update_my_data', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => 'not-an-email',
+        ])
+            ->assertStatus(422)
+            // The shim keeps the legacy error body, not the platform envelope.
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation error');
+
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'google_account' => null,
+        ]);
+    }
+
+    /**
+     * Signing out of Drive has to be expressible. This is the one field where an
+     * explicit null is a *value* rather than an omission — the others keep
+     * filled() semantics so a stray null cannot blank a customer's name on a
+     * public endpoint.
+     */
+    public function test_update_my_data_clears_the_google_account_on_explicit_null(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'full_name' => 'Sara',
+            'google_account' => 'sara.backups@gmail.com',
+        ]);
+
+        $this->postJson('/api/update_my_data', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => null,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'google_account' => null,
+            'full_name' => 'Sara',
+        ]);
+    }
+
+    /** Omitting the key leaves a stored account alone — that is the difference. */
+    public function test_update_my_data_leaves_the_google_account_when_omitted(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => 'sara.backups@gmail.com',
+        ]);
+
+        $this->postJson('/api/update_my_data', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'fcm_token' => 'rotated',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('device_subscriptions', [
+            'device_id' => 'dev-1',
+            'google_account' => 'sara.backups@gmail.com',
+        ]);
+    }
+
+    /**
+     * check_device is public and unauthenticated, and a device id is not a secret
+     * — the app displays it with a copy button and tells users to send it to
+     * support over WhatsApp. Returning the real address here would hand anyone
+     * holding an id a customer's email.
+     */
+    public function test_check_device_masks_the_google_account(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => 'sara.backups@gmail.com',
+        ]);
+
+        $response = $this->postJson('/api/check_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+        ])->assertOk();
+
+        $response->assertJsonPath('google_account', 's••••••••••s@gmail.com');
+
+        // The assertion that matters: the raw address must not appear anywhere in
+        // the body, however the field is shaped.
+        $this->assertStringNotContainsString(
+            'sara.backups@gmail.com',
+            $response->getContent() ?: '',
+        );
+
+        // Nor may the local part survive in any recoverable form — the first
+        // mask attempt kept "backups" intact, which is most of the address.
+        $this->assertStringNotContainsString('backups', $response->getContent() ?: '');
+    }
+
+    /**
+     * The mask must not degrade on inputs that are short, unusual, or not
+     * address-shaped — those are exactly where a length-based mask leaks.
+     */
+    #[DataProvider('googleAccountMaskCases')]
+    public function test_the_mask_hides_the_local_part(string $stored, string $expected): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => $stored,
+        ]);
+
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => 'dev-1'])
+            ->assertOk()
+            ->assertJsonPath('google_account', $expected);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function googleAccountMaskCases(): array
+    {
+        return [
+            'long local part' => [
+                'mohamad.hasan.it.96@gmail.com',
+                'm•••••••••••••••••6@gmail.com',
+            ],
+            'short local part keeps an initial' => ['abc@gmail.com', 'a•c@gmail.com'],
+            // Two characters or fewer cannot show an initial without showing most
+            // of it, so nothing is shown.
+            'two characters are hidden entirely' => ['ab@gmail.com', '••@gmail.com'],
+            'one character is hidden entirely' => ['a@gmail.com', '•@gmail.com'],
+            // A custom domain still reveals the organisation — the known residual.
+            'custom domain' => ['owner@pharmacy.example', 'o•••r@pharmacy.example'],
+            // Validation should stop this reaching storage; if it ever does, the
+            // public surface must hide more, not less.
+            'not address shaped' => ['notanemail', 'n•••••••••'],
+        ];
+    }
+
+    public function test_check_device_returns_null_when_no_google_account_is_set(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => null,
+        ]);
+
+        $this->postJson('/api/check_device', [
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+        ])
+            ->assertOk()
+            ->assertJsonPath('google_account', null);
+    }
+
+    /** Staff are authenticated and need the real address to actually help. */
+    public function test_the_staff_console_shows_the_full_google_account(): void
+    {
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => 'dev-1',
+            'google_account' => 'sara.backups@gmail.com',
+        ]);
+
+        $this->actAsStaff();
+
+        $this->getJson('/api/v1/device-subscriptions')
+            ->assertOk()
+            ->assertJsonPath('data.0.google_account', 'sara.backups@gmail.com');
     }
 
     /**
