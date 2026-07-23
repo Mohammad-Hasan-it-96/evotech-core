@@ -110,13 +110,13 @@ records pointing at your **VPS public IP** (`www` is optional):
 CloudPanel → **Sites → Add Site → PHP Site (Generic / Laravel if listed)**:
 - Domain: `api.evotech-sys.com`
 - PHP version: **8.3** (or 8.4)
-- Note the created **Site User** and its home, e.g. `/home/evotech-api/`.
+- Note the created **Site User** and its home, e.g. `/home/evotech-sys-api/`.
 
 ### 3.2 Get the code
 SSH in as the site user (CloudPanel → Site → gives SSH user):
 
 ```bash
-cd /home/evotech-api/htdocs
+cd /home/evotech-sys-api/htdocs
 rm -rf api.evotech-sys.com                 # remove the empty scaffold CloudPanel created
 git clone https://github.com/Mohammad-Hasan-it-96/evotech-core.git api.evotech-sys.com
 cd api.evotech-sys.com
@@ -126,7 +126,7 @@ composer install --no-dev --optimize-autoloader
 ### 3.3 Point the vhost at Laravel's `public/`
 Laravel must be served from `public/`, never the repo root.
 CloudPanel → Site → **Vhost** (or "Root Directory"): set the document root to
-`/home/evotech-api/htdocs/api.evotech-sys.com/public` and ensure the Nginx location
+`/home/evotech-sys-api/htdocs/api.evotech-sys.com/public` and ensure the Nginx location
 block has Laravel's front-controller rule:
 
 ```nginx
@@ -220,12 +220,12 @@ Two things must run continuously:
 **a) Scheduler** (daily subscription-expiry sweep, etc.) — add a cron for the site user
 (CloudPanel → Site → **Cron Jobs**, or `crontab -e`):
 ```cron
-* * * * * cd /home/evotech-api/htdocs/api.evotech-sys.com && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /home/evotech-sys-api/htdocs/api.evotech-sys.com && php artisan schedule:run >> /dev/null 2>&1
 ```
 
 **b) Queue worker** (queued notifications). Simplest is PM2 (already installed for Next):
 ```bash
-cd /home/evotech-api/htdocs/api.evotech-sys.com
+cd /home/evotech-sys-api/htdocs/api.evotech-sys.com
 pm2 start "php artisan queue:work --sleep=3 --tries=3 --max-time=3600" --name evotech-queue
 ```
 (Alternatively use Supervisor if you prefer. Restart the worker on every deploy so it
@@ -357,7 +357,7 @@ credential-reviewed.
 
 **API (evotech-core):**
 ```bash
-cd /home/evotech-api/htdocs/api.evotech-sys.com
+cd /home/evotech-sys-api/htdocs/api.evotech-sys.com
 git pull
 composer install --no-dev --optimize-autoloader
 php artisan migrate --force
