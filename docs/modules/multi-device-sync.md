@@ -72,6 +72,7 @@ actions additionally require the owner seat.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
+| POST | `/business` | **licensing identity** | **Owner onboarding** — a licensed single device stands up (or recovers) its sync business and gets its owner seat token. The head of the chain: without it no owner seat, no join token, no member. Requires a verified subscription (`SUBSCRIPTION_REQUIRED` otherwise); idempotent (re-call rotates the owner token). |
 | POST | `/enroll` | **public** | A joining device redeems a join token — it has no seat yet, so it proves itself with the single-use token in its body. Returns its `sync_token` (once) + the bootstrap handoff. |
 | GET | `/bootstrap/{joinToken}` | **signed** | The bootstrap snapshot download. Credential-less: the short-lived signature minted for the enrolling device *is* the authorization (ADR 0008 style). Deleted after it is sent. |
 | POST | `/join-tokens` | owner | Mint a single-use, short-TTL join token (rendered as a QR). |
@@ -84,6 +85,22 @@ actions additionally require the owner seat.
 Cross-business access to a `{seat}` or `{joinToken}` returns **404, never 403** — a
 valid id from another business must be indistinguishable from a non-existent
 record.
+
+## Owner onboarding
+
+Before any join token can exist, a device must become the **owner** of a business.
+A licensed single device calls `POST /api/v1/sync/business`, authenticated by its
+**licensing identity** (`app_name` + `device_id`) — the only identity it holds
+before it has a sync seat. The server requires a **verified** subscription on that
+device (`SUBSCRIPTION_REQUIRED` otherwise), then idempotently: creates the
+`device_businesses` row seeded from the device's own subscription (expiry, trial,
+plan, verification), links `device_subscriptions.business_id`, and mints the owner
+seat — returning its durable sync token once. `device_allowance` comes from the
+plan (`config('device-subscriptions.sync.plan_allowance')`, unmapped → `default_allowance`).
+Re-calling it **rotates** the owner token rather than creating a second business, so
+a reinstall or lost token self-recovers and the non-revocable owner seat (R1) is
+never duplicated. `establishBusiness()` on the service remains a lower-level
+test/construction primitive; `onboardOwner()` is the real HTTP-backed path.
 
 ## Enrollment and the bootstrap handoff
 
@@ -225,6 +242,7 @@ response instead of delete-after-send.
 ## Tests
 
 - `DeviceSyncGuardTest` — missing/invalid/revoked token → 401; cross-business seat access → 404; a business scopes only its own seats.
+- `DeviceSyncOwnerOnboardingTest` — a verified device establishes its business + owner seat and links the licensing row; idempotent token rotation; `SUBSCRIPTION_REQUIRED` for unverified/unknown devices; fallback-id rejection; plan-derived allowance admitting a member.
 - `DeviceSyncEnrollmentTest` — owner-only mint; enroll returns seat + bootstrap cursor; allowance/fallback/single-use/owner-non-revocable rules; revoked seat → `check_device` NOT verified; the 3-device distinguishing bootstrap case.
 - `DeviceSyncPushPullTest` — monotonic gap-free seqs; per-row idempotency; no-echo; the examined-not-returned watermark; per-business isolation; LWW by HLC under out-of-order arrival; the data-only doorbell to siblings only.
 
