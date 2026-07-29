@@ -57,5 +57,16 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(120)->by('product|'.$key);
         });
+
+        // Multi-device sync (ADR 0011): per-device-seat limiter, keyed off the
+        // authenticated seat so one device's polling cannot starve its siblings;
+        // falls back to IP for unauthenticated hits (enrollment).
+        RateLimiter::for('sync', function (Request $request) {
+            $seat = $request->user('device-sync');
+            $id = $seat instanceof Authenticatable ? $seat->getAuthIdentifier() : $request->ip();
+            $key = is_scalar($id) ? (string) $id : 'unknown';
+
+            return Limit::perMinute(120)->by('sync|'.$key);
+        });
     }
 }

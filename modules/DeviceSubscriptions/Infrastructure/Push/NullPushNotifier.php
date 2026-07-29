@@ -19,4 +19,12 @@ final class NullPushNotifier implements DevicePushNotifier
             'title' => $title,
         ]);
     }
+
+    public function sendData(string $appName, string $token, string $type): void
+    {
+        Log::debug('DeviceSubscriptions data push suppressed (null notifier).', [
+            'app' => $appName,
+            'type' => $type,
+        ]);
+    }
 }

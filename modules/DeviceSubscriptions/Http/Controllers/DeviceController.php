@@ -94,9 +94,18 @@ final class DeviceController
             return $this->notFound();
         }
 
+        // A revoked multi-device-sync seat forces NOT verified (ADR 0011, D) — the
+        // one coupling between the sync and licensing credentials. Additive: a
+        // device with no seat (every 1.0.1 install) is unaffected.
+        $verified = $device->isActive()
+            && ! $this->devices->isSeatRevoked(
+                (string) $request->string('device_id'),
+                (string) $request->string('app_name'),
+            );
+
         return response()->json([
             'success' => true,
-            'is_verified' => (int) $device->isActive(),
+            'is_verified' => (int) $verified,
             'is_trial' => (int) $device->isOnTrial(),
             'plan' => $device->plan_id,
             'expires_at' => $device->expires_at,

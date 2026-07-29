@@ -743,6 +743,50 @@
                 }
             }
         },
+        "/v1/sync/bootstrap/{joinToken}": {
+            "get": {
+                "operationId": "v1.sync.bootstrap",
+                "tags": [
+                    "BootstrapDownload"
+                ],
+                "parameters": [
+                    {
+                        "name": "joinToken",
+                        "in": "path",
+                        "required": true,
+                        "description": "The join token UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        },
+                        "headers": {
+                            "Content-Disposition": {
+                                "required": true,
+                                "schema": {
+                                    "type": "string"
+                                },
+                                "example": "attachment; filename=bootstrap.sqlite"
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            }
+        },
         "/v1/companies": {
             "get": {
                 "operationId": "v1.companies.index",
@@ -7879,6 +7923,517 @@
                     }
                 }
             }
+        },
+        "/v1/sync/changes": {
+            "post": {
+                "operationId": "v1.sync.changes.push",
+                "summary": "POST /api/v1/sync/changes \u2014 record a batch of local edits",
+                "tags": [
+                    "SyncChange"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "push_token": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 255
+                                    },
+                                    "changes": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "row_uuid": {
+                                                    "type": "string",
+                                                    "maxLength": 36
+                                                },
+                                                "table_name": {
+                                                    "type": "string",
+                                                    "maxLength": 40
+                                                },
+                                                "op": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "enum": [
+                                                        "upsert",
+                                                        "delete"
+                                                    ]
+                                                },
+                                                "authored_hlc": {
+                                                    "type": "string",
+                                                    "maxLength": 40
+                                                },
+                                                "payload": {
+                                                    "type": [
+                                                        "array",
+                                                        "null"
+                                                    ],
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "required": [
+                                                "row_uuid",
+                                                "table_name",
+                                                "authored_hlc"
+                                            ]
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 500
+                                    }
+                                },
+                                "required": [
+                                    "changes"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "applied": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                "last_seq": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "applied",
+                                                "last_seq"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "string"
+                                        },
+                                        "links": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "meta",
+                                        "links"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "get": {
+                "operationId": "v1.sync.changes.pull",
+                "summary": "GET /api/v1/sync/changes \u2014 pull changes this device has not yet seen",
+                "tags": [
+                    "SyncChange"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 0
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 500
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {}
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "next_cursor": {
+                                                    "type": "integer"
+                                                },
+                                                "has_more": {
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "next_cursor",
+                                                "has_more"
+                                            ]
+                                        },
+                                        "links": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "meta",
+                                        "links"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/sync/enroll": {
+            "post": {
+                "operationId": "v1.sync.enroll",
+                "summary": "POST /api/v1/sync/enroll \u2014 a joining device redeems a join token (public)",
+                "tags": [
+                    "SyncEnrollment"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "join_token": {
+                                        "type": "string"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "maxLength": 200
+                                    },
+                                    "push_token": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 255
+                                    }
+                                },
+                                "required": [
+                                    "join_token",
+                                    "device_id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/v1/sync/join-tokens": {
+            "post": {
+                "operationId": "v1.sync.join-tokens.mint",
+                "summary": "POST /api/v1/sync/join-tokens \u2014 owner mints a single-use enrollment QR",
+                "tags": [
+                    "SyncEnrollment"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/sync/join-tokens/{joinToken}/bootstrap": {
+            "post": {
+                "operationId": "v1.sync.join-tokens.bootstrap",
+                "summary": "POST /api/v1/sync/join-tokens/{joinToken}/bootstrap \u2014 owner uploads the\nbootstrap snapshot and its cursor `C` (Decision 13). The cursor is the\nowner's OWN local pull cursor; the SHA-256 is owner-computed and stored as-is\nso the joiner's integrity check is end-to-end owner\u2192joiner (H2)",
+                "tags": [
+                    "SyncEnrollment"
+                ],
+                "parameters": [
+                    {
+                        "name": "joinToken",
+                        "in": "path",
+                        "required": true,
+                        "description": "The join token UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "cursor": {
+                                        "type": "integer",
+                                        "minimum": 0
+                                    },
+                                    "snapshot_sha256": {
+                                        "type": "string",
+                                        "minLength": 64,
+                                        "maxLength": 64
+                                    },
+                                    "snapshot": {
+                                        "type": "string",
+                                        "format": "binary",
+                                        "contentMediaType": "application/octet-stream",
+                                        "maxLength": 51200
+                                    }
+                                },
+                                "required": [
+                                    "cursor",
+                                    "snapshot_sha256",
+                                    "snapshot"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "join_token_uuid": {
+                                                    "type": "string"
+                                                },
+                                                "cursor": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "join_token_uuid",
+                                                "cursor"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "string"
+                                        },
+                                        "links": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "meta",
+                                        "links"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "500": {
+                        "description": "An error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Error overview.",
+                                            "example": ""
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/sync/devices": {
+            "get": {
+                "operationId": "v1.sync.devices.index",
+                "summary": "GET /api/v1/sync/devices \u2014 the business's seats (any authenticated device)",
+                "tags": [
+                    "SyncEnrollment"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "uuid": {
+                                                        "type": "string"
+                                                    },
+                                                    "device_id": {
+                                                        "type": "string"
+                                                    },
+                                                    "role": {
+                                                        "type": "string"
+                                                    },
+                                                    "revoked": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "last_used_at": {
+                                                        "type": "string"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "uuid",
+                                                    "device_id",
+                                                    "role",
+                                                    "revoked",
+                                                    "last_used_at",
+                                                    "created_at"
+                                                ]
+                                            }
+                                        },
+                                        "meta": {
+                                            "type": "string"
+                                        },
+                                        "links": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "meta",
+                                        "links"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/sync/devices/{seat}": {
+            "delete": {
+                "operationId": "v1.sync.devices.revoke",
+                "summary": "DELETE /api/v1/sync/devices/{seat} \u2014 owner revokes a member seat. The owner\nseat is refused (R1); revocation is not a remote wipe (R2)",
+                "tags": [
+                    "SyncEnrollment"
+                ],
+                "parameters": [
+                    {
+                        "name": "seat",
+                        "in": "path",
+                        "required": true,
+                        "description": "The seat UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -8525,6 +9080,12 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "business_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 },
                 "required": [
@@ -8546,7 +9107,8 @@
                     "requested_plan",
                     "contact_method",
                     "trial_expires_at",
-                    "google_account"
+                    "google_account",
+                    "business_id"
                 ],
                 "title": "DeviceSubscription"
             },

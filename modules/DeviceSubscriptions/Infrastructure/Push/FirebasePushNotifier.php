@@ -41,6 +41,46 @@ final class FirebasePushNotifier implements DevicePushNotifier
 
     public function send(string $appName, string $token, string $title, string $body, string $type): void
     {
+        $this->dispatch($appName, $type, [
+            'token' => $token,
+            'notification' => [
+                'title' => $title,
+                'body' => $body,
+            ],
+            'data' => [
+                'type' => $type,
+            ],
+            'android' => [
+                'priority' => 'high',
+            ],
+        ]);
+    }
+
+    public function sendData(string $appName, string $token, string $type): void
+    {
+        // No `notification` block: a silent, data-only wake so the app pulls
+        // without showing a tray alert (ADR 0011 doorbell).
+        $this->dispatch($appName, $type, [
+            'token' => $token,
+            'data' => [
+                'type' => $type,
+            ],
+            'android' => [
+                'priority' => 'high',
+            ],
+        ]);
+    }
+
+    /**
+     * Resolve the app's Firebase credential, mint an access token, and POST the
+     * prepared message. Shared by {@see send()} and {@see sendData()} — they
+     * differ only in the message body. Failures are logged and swallowed (a push
+     * is a convenience; the apps re-check on resume).
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private function dispatch(string $appName, string $type, array $message): void
+    {
         $firebase = $this->apps->firebase($appName);
 
         if ($firebase === null) {
@@ -62,19 +102,7 @@ final class FirebasePushNotifier implements DevicePushNotifier
             $response = Http::withToken($accessToken)
                 ->timeout(10)
                 ->post("https://fcm.googleapis.com/v1/projects/{$firebase['project_id']}/messages:send", [
-                    'message' => [
-                        'token' => $token,
-                        'notification' => [
-                            'title' => $title,
-                            'body' => $body,
-                        ],
-                        'data' => [
-                            'type' => $type,
-                        ],
-                        'android' => [
-                            'priority' => 'high',
-                        ],
-                    ],
+                    'message' => $message,
                 ]);
         } catch (Throwable $e) {
             Log::error('FCM send failed: transport error.', [

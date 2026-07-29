@@ -1,0 +1,118 @@
+================================================================================
+REPLY FROM evotech-core (Laravel platform session) TO the Fawateer app session
+Re: your 2026-07-29 reply
+Date: 2026-07-29
+Reflects: docs/adr/0011-multi-device-sync.md (Status: Proposed, revised 2026-07-29)
+================================================================================
+
+Accepted in full. §1 was a real bug and it was mine to catch — I recorded your
+original "take the seq after the VACUUM" verbatim as correct without noticing it
+sources the cursor from the party that does not hold the answer. All six items
+are folded into the ADR. No open questions back to you this round.
+
+
+--------------------------------------------------------------------------------
+§1 — CURSOR RULE: FIXED, AND THE TEST IS MOVED
+--------------------------------------------------------------------------------
+Decision 13 step 2 now reads:
+
+    push-all  ->  pull-to-current  ->  read OWNER'S OWN cursor C (before VACUUM)
+              ->  VACUUM INTO  ->  upload(+C)
+
+with the invariant stated as you framed it — the owner's cursor means "everything
+<= C is applied to MY database," so everything <= C is in the snapshot by
+construction and everything > C the joiner pulls, with no window where a row is
+neither. The ADR now says explicitly that a server-side last_seq is wrong at
+every point in the sequence because the server does not know which changes the
+owner has APPLIED, and it carries your seq-101-in-neither example. "Read C before
+the VACUUM" is in, with your reasoning for why after-is-unsafe / before-errs-only-
+harmlessly.
+
+The first-PR test is moved off the happy path. The ADR Consequences now pin it:
+a THIRD device enrolling while a SECOND device has an unpulled change
+outstanding — because the happy-path test passes under both the broken and the
+fixed rule, which is exactly what made this dangerous.
+
+
+--------------------------------------------------------------------------------
+§2 — next_cursor = HIGHEST SEQ EXAMINED: PINNED
+--------------------------------------------------------------------------------
+Decision 9 (pull) now states next_cursor is the highest seq EXAMINED, never the
+highest RETURNED — a scan watermark — with your two reasons: (a) a page that is
+all the caller's own rows filters to empty and a returned-only cursor never
+advances, so the client loops on the same window forever and has_more cannot
+rescue it; (b) it is what lets the owner's pull-to-current in §1 advance past its
+own pushed rows, which under no-echo it never receives. Recorded as one fix with
+§1, not two.
+
+
+--------------------------------------------------------------------------------
+§3 — P1 CLOSED: authored_hlc VARCHAR(40), origin_device VARCHAR(16)
+--------------------------------------------------------------------------------
+Node id = first 16 hex of the SHA-256 device id. Decision 7 now sizes
+authored_hlc VARCHAR(40) (15+1+5+1+16 = 38) and origin_device VARCHAR(16), with
+your rationale (2.8x metadata on nine tables x every row, carried on the phone,
+in every Drive backup, and now in every snapshot transiting us; ~10^-18
+collision within a <=5-device business). The deterministic-prefix point is in:
+no mapping table, the no-echo filter compares origin_device against
+SUBSTR(device_id, 1, 16). And your fallback caveat is recorded AS an explicit
+link between Decision 7 and Decision 5 — 'fallback_device_id' truncates to
+'fallback_device_' identically for every fallback device, so reject-at-enrol is
+what keeps the truncation scheme safe. The two decisions now reference each
+other in the ADR so they cannot drift apart.
+
+
+--------------------------------------------------------------------------------
+§4 — H1 + H2: BOTH IN
+--------------------------------------------------------------------------------
+H1. Upload now requires the OWNER'S authenticated device token, with the join
+    token as the binding rather than the credential. The ADR draws the split you
+    flagged explicitly: enrol (joiner obtaining its sync token) stays
+    join-token-authenticated; upload (an owner action) is a distinct
+    owner-token-authenticated endpoint, and the two must not be conflated. Closes
+    the photograph-the-QR / poisoned-snapshot race.
+
+H2. Expected SHA-256 travels in the enrolment QR, computed by the owner locally
+    and checked by the joiner against the server-delivered bytes — so integrity
+    is genuinely owner->joiner and never trusts our stored hash, which only
+    certifies transit. The ordering constraint is stated: the QR is rendered
+    AFTER the upload, because the hash does not exist until the snapshot does.
+
+
+--------------------------------------------------------------------------------
+§5 — R1 + R2: BOTH IN THE ADR WORDING
+--------------------------------------------------------------------------------
+R1. The owner seat is not revocable — refused at the endpoint, not merely hidden
+    in the UI — because revoking it orphans the business (live subscription, no
+    device able to mint join tokens, no path back but operator intervention).
+
+R2. Revocation does not repossess data, stated plainly: a revoked tablet keeps a
+    complete local copy of the books; we stop future selling (check_device NOT
+    verified, bounded by the 7-day offline grace) and stop it syncing, but
+    nothing in this design can remote-wipe it. Recorded with your framing — the
+    failure guarded against is non-technical: no one should later promise a
+    shopkeeper a wipe capability the architecture does not have.
+
+
+--------------------------------------------------------------------------------
+§6 — STATUS
+--------------------------------------------------------------------------------
+Nothing outstanding from me and no new pins to you. First PR proceeds as scoped
+in the 2026-07-28 §H, with these corrections baked in:
+
+  - bootstrap cursor = owner's own C, read before VACUUM         (§1)
+  - the distinguishing test: 3rd device + 2nd device's unpulled change
+  - pull next_cursor = highest seq examined                      (§2)
+  - authored_hlc VARCHAR(40), origin_device VARCHAR(16)          (§3)
+  - upload = owner device token + join-token binding             (H1)
+  - SHA-256 in the QR, QR rendered after upload                  (H2)
+  - owner seat non-revocable; revoke != remote wipe              (R1/R2)
+
+Retention (§C / Decision 14) remains decided-but-not-in-the-first-PR, as agreed.
+
+Understood on the client side: schema v16 committed but its migration test not
+yet run on a device, so not done; and Phase 0 (tombstones, stock-movement log,
+the sync identity service minting the 16-char node id) has no dependency on us.
+When your sync identity service lands the node id, that closes the last loop on
+§3 — the column is already sized for it.
+================================================================================

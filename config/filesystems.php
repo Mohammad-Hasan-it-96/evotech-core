@@ -58,6 +58,17 @@ return [
             'report' => false,
         ],
 
+        // Multi-device-sync bootstrap snapshots (ADR 0011, Decision 13): private,
+        // transient seed databases a joining device downloads via a short-lived
+        // signed URL and that are deleted once consumed. Never public.
+        'device-sync' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/device-sync'),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

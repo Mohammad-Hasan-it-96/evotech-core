@@ -7,6 +7,7 @@ use Illuminate\Support\Carbon;
 use Modules\Core\Domain\Contracts\AuditLogger;
 use Modules\DeviceSubscriptions\Domain\Contracts\DevicePushNotifier;
 use Modules\DeviceSubscriptions\Domain\Events\DeviceActivated;
+use Modules\DeviceSubscriptions\Domain\Models\DeviceSeat;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 
 /**
@@ -26,6 +27,28 @@ final class DeviceSubscriptionService
     public function find(string $deviceId, string $appName): ?DeviceSubscription
     {
         return DeviceSubscription::query()->forDevice($deviceId, $appName)->first();
+    }
+
+    /**
+     * Whether this device's multi-device-sync seat is currently revoked (ADR 0011,
+     * Decision 5/D) — the one place the sync and licensing credentials couple.
+     *
+     * Purely ADDITIVE: a device with no seat (every Fawateer 1.0.1 install) is
+     * never revoked here, so `check_device` answers exactly as before. A device
+     * that has been re-admitted (its seat reactivated) is not revoked either — an
+     * active seat always wins over a stale revoked one.
+     */
+    public function isSeatRevoked(string $deviceId, string $appName): bool
+    {
+        $seats = DeviceSeat::query()
+            ->where('app_name', $appName)
+            ->where('device_id', $deviceId);
+
+        if ((clone $seats)->whereNull('revoked_at')->exists()) {
+            return false;
+        }
+
+        return (clone $seats)->whereNotNull('revoked_at')->exists();
     }
 
     /**
