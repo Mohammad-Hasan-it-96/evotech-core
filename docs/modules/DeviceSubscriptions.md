@@ -86,6 +86,12 @@ a stray null must not blank a customer's name.
 `/api/v1/device/{register,check,profile,review,plans}` (`auth:product`, `throttle:product`) mirror
 the device endpoints for future app versions.
 
+> **Multi-device sync ([ADR 0011](../adr/0011-multi-device-sync.md)).** A fourth route group,
+> `/api/v1/sync/*`, lets one subscription span several devices (a **business** owning N seats)
+> under a new per-device `auth:device-sync` guard. It is entirely additive — the legacy shim and
+> single-device world are untouched. It is large enough to have its own doc:
+> [`multi-device-sync.md`](multi-device-sync.md).
+
 The enveloped staff API (`auth:sanctum`), keyed by the model's `uuid`, backs the operator console
 at `evotech-web` `/dashboard/devices`:
 

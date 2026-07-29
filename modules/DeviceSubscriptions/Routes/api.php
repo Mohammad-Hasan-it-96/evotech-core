@@ -8,6 +8,9 @@ use Modules\DeviceSubscriptions\Http\Controllers\DeviceCatalogController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceNotificationController;
 use Modules\DeviceSubscriptions\Http\Controllers\PlanController;
+use Modules\DeviceSubscriptions\Http\Controllers\Sync\BootstrapDownloadController;
+use Modules\DeviceSubscriptions\Http\Controllers\Sync\SyncChangeController;
+use Modules\DeviceSubscriptions\Http\Controllers\Sync\SyncEnrollmentController;
 
 /*
  * DeviceSubscriptions routes (ADR 0010).
@@ -142,4 +145,50 @@ Route::prefix('api/v1')
             ->name('device-notifications.test');
         Route::post('device-notifications/broadcast', [DeviceNotificationController::class, 'broadcast'])
             ->name('device-notifications.broadcast');
+    });
+
+// 4. Multi-device sync API (auth:device-sync, ADR 0011) ---------------------------
+/*
+ * One subscription = one business owning N devices. Every route here is scoped to
+ * the authenticated seat's business (isolation is the feature's paramount property),
+ * with two deliberate exceptions:
+ *
+ *  - `enroll` is public: a joining device has no seat yet and proves itself with the
+ *    single-use join token in its body.
+ *  - the bootstrap download is credential-less but `signed`: the short-lived
+ *    signature minted for the enrolling device IS the authorization (ADR 0008 style).
+ *
+ * All additive — no legacy shim route changes, so Fawateer 1.0.1 is untouched.
+ */
+Route::prefix('api/v1/sync')
+    ->name('api.v1.sync.')
+    ->group(function (): void {
+        // Public joiner entry point (throttled per IP).
+        Route::post('enroll', [SyncEnrollmentController::class, 'enroll'])
+            ->middleware('throttle:sync')
+            ->name('enroll');
+
+        // Signed, credential-less bootstrap snapshot delivery.
+        Route::get('bootstrap/{joinToken}', BootstrapDownloadController::class)
+            ->middleware('signed')
+            ->name('bootstrap');
+
+        // Everything else: per-device seat auth + per-seat rate limit.
+        Route::middleware(['auth:device-sync', 'throttle:sync'])->group(function (): void {
+            // Owner-only seat administration (enforced in the controller).
+            Route::post('join-tokens', [SyncEnrollmentController::class, 'mintJoinToken'])
+                ->name('join-tokens.mint');
+            Route::post('join-tokens/{joinToken}/bootstrap', [SyncEnrollmentController::class, 'attachBootstrap'])
+                ->name('join-tokens.bootstrap');
+            Route::get('devices', [SyncEnrollmentController::class, 'devices'])
+                ->name('devices.index');
+            Route::delete('devices/{seat}', [SyncEnrollmentController::class, 'revokeDevice'])
+                ->name('devices.revoke');
+
+            // The change log — any authenticated device.
+            Route::post('changes', [SyncChangeController::class, 'push'])
+                ->name('changes.push');
+            Route::get('changes', [SyncChangeController::class, 'pull'])
+                ->name('changes.pull');
+        });
     });

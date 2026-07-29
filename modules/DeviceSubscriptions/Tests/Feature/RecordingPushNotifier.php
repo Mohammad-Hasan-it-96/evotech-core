@@ -14,6 +14,9 @@ final class RecordingPushNotifier implements DevicePushNotifier
     /** @var list<array{app: string, token: string, title: string, body: string, type: string}> */
     public array $sent = [];
 
+    /** @var list<array{app: string, token: string, type: string}> */
+    public array $data = [];
+
     public function send(string $appName, string $token, string $title, string $body, string $type): void
     {
         $this->sent[] = [
@@ -21,6 +24,15 @@ final class RecordingPushNotifier implements DevicePushNotifier
             'token' => $token,
             'title' => $title,
             'body' => $body,
+            'type' => $type,
+        ];
+    }
+
+    public function sendData(string $appName, string $token, string $type): void
+    {
+        $this->data[] = [
+            'app' => $appName,
+            'token' => $token,
             'type' => $type,
         ];
     }

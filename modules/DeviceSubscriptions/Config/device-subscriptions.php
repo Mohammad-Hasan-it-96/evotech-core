@@ -93,6 +93,38 @@ return [
         ],
     ],
 
+    /*
+     * Multi-device sync (ADR 0011). One subscription = one business owning N
+     * devices. All additive: absent config leaves the legacy single-device shim
+     * untouched.
+     *
+     * `join_token_ttl_minutes` — how long an owner-minted enrollment QR stays
+     *   redeemable. Short by design; it is a single-use binding, not a credential.
+     * `snapshot_url_ttl_minutes` — lifetime of the signed URL a joining device
+     *   uses to fetch the bootstrap snapshot (ADR 0008 delivery).
+     * `snapshot_disk` — the PRIVATE disk bootstrap snapshots are staged on. Never
+     *   public; served only through the signed delivery route and deleted once
+     *   consumed (Decision 13 — snapshots are never retained).
+     * `pull_limit` / `pull_max_limit` — default and hard-capped page size for a
+     *   pull, so one poll cannot ask for an unbounded window.
+     * `tiers` — plan_id → device allowance. The shipped tiers are 1/3/5; an
+     *   unknown plan falls back to `default_allowance`.
+     */
+    'sync' => [
+        'join_token_ttl_minutes' => (int) env('DEVICE_SYNC_JOIN_TTL_MINUTES', 15),
+        'snapshot_url_ttl_minutes' => (int) env('DEVICE_SYNC_SNAPSHOT_TTL_MINUTES', 15),
+        'snapshot_disk' => env('DEVICE_SYNC_SNAPSHOT_DISK', 'device-sync'),
+        'snapshot_max_kb' => (int) env('DEVICE_SYNC_SNAPSHOT_MAX_KB', 51200),
+        'pull_limit' => (int) env('DEVICE_SYNC_PULL_LIMIT', 200),
+        'pull_max_limit' => (int) env('DEVICE_SYNC_PULL_MAX_LIMIT', 500),
+        'default_allowance' => (int) env('DEVICE_SYNC_DEFAULT_ALLOWANCE', 1),
+        'tiers' => [
+            'solo' => 1,
+            'trio' => 3,
+            'team' => 5,
+        ],
+    ],
+
     'currency' => [
         'code' => 'USD',
         'symbol' => '$',

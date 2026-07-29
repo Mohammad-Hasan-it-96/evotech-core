@@ -49,6 +49,15 @@ return [
         'product' => [
             'driver' => 'product-api-key',
         ],
+
+        // Per-device multi-device-sync auth (ADR 0011). Each device holds its own
+        // seat credential, and the resolved seat carries the business scope — so
+        // this guard, unlike 'product', isolates one business from another. The
+        // 'device-sync-token' driver is registered by the DeviceSubscriptions
+        // module (Auth::viaRequest); the request-based guard needs no provider.
+        'device-sync' => [
+            'driver' => 'device-sync-token',
+        ],
     ],
 
     /*
