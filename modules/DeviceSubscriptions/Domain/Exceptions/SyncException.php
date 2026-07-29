@@ -32,6 +32,15 @@ final class SyncException extends RuntimeException
     }
 
     /**
+     * Owner onboarding was attempted by a device with no verified subscription —
+     * a business can only be stood up on top of a live licence.
+     */
+    public static function subscriptionRequired(): self
+    {
+        return new self('SUBSCRIPTION_REQUIRED', 'This device has no active subscription to enable sync.', 403);
+    }
+
+    /**
      * The joining device reported the legacy shared fallback device id, which
      * cannot be a stable per-device identity (Decision 5).
      */

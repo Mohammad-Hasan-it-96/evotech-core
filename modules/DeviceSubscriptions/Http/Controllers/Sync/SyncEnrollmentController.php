@@ -28,6 +28,50 @@ final class SyncEnrollmentController extends SyncController
         parent::__construct($context);
     }
 
+    /**
+     * POST /api/v1/sync/business — owner onboarding (public, licensing identity).
+     *
+     * Stands up (or recovers) the caller device's sync business and returns its
+     * owner seat token. This is the entry point for the whole feature: it is what
+     * a licensed single device calls to enable multi-device, before any join token
+     * or seat exists. Authenticated by the device's licensing identity, not a sync
+     * seat (it has none yet).
+     */
+    public function establish(Request $request): JsonResponse
+    {
+        $request->validate([
+            'app_name' => ['required', 'string', 'max:50'],
+            'device_id' => ['required', 'string', 'max:200'],
+            'push_token' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        return $this->guardSync(function () use ($request): JsonResponse {
+            $enrolled = $this->enrollment->onboardOwner(
+                (string) $request->string('app_name'),
+                (string) $request->string('device_id'),
+                $request->filled('push_token') ? (string) $request->string('push_token') : null,
+            );
+
+            $enrolled->seat->loadMissing('business');
+
+            return ApiResponse::success([
+                'sync_token' => $enrolled->plaintext,
+                'seat' => [
+                    'uuid' => $enrolled->seat->uuid,
+                    'role' => $enrolled->seat->role,
+                    'device_id' => $enrolled->seat->device_id,
+                ],
+                'business_uuid' => $enrolled->seat->business->uuid,
+                'device_allowance' => $enrolled->seat->business->device_allowance,
+                'bootstrap' => [
+                    'cursor' => $enrolled->bootstrap->cursor,
+                    'snapshot_url' => $enrolled->bootstrap->snapshotUrl,
+                    'snapshot_sha256' => $enrolled->bootstrap->snapshotSha256,
+                ],
+            ], status: 201);
+        });
+    }
+
     /** POST /api/v1/sync/join-tokens — owner mints a single-use enrollment QR. */
     public function mintJoinToken(): JsonResponse
     {

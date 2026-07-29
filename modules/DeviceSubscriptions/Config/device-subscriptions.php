@@ -123,6 +123,16 @@ return [
             'trio' => 3,
             'team' => 5,
         ],
+        /*
+         * plan_id → device allowance, consulted at owner onboarding. An unmapped
+         * plan (every V1 plan today) falls back to `default_allowance`. This is the
+         * operator-facing knob for multi-device tiers until plan provisioning wires
+         * the tiers above in directly (a documented follow-up). Example:
+         *   'yearly' => 3,  // the annual plan includes up to 3 devices
+         */
+        'plan_allowance' => [
+            // 'yearly' => 3,
+        ],
     ],
 
     'currency' => [

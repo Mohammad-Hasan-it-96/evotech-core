@@ -102,6 +102,110 @@ final class SyncEnrollmentService
     }
 
     /**
+     * Onboard the owner: promote a licensed single device into a sync business and
+     * hand back its owner seat token (ADR 0011). This is the head of the whole
+     * enrollment chain — until it runs, no owner seat exists to mint join tokens.
+     *
+     * Authenticated by the device's LICENSING identity (`app_name` + `device_id`),
+     * the only identity the device holds before it has a sync seat — the same
+     * anchor `check_device` uses. The device must already carry a verified
+     * subscription; that subscription's state seeds the business (expiry, plan,
+     * verification), and `device_subscriptions.business_id` is linked so
+     * `check_device` reads the business thereafter (Decision 1/30).
+     *
+     * Idempotent: a device that already owns a business gets its owner token
+     * ROTATED (invalidating the old one) rather than a second business — so a
+     * reinstall or a lost token recovers without operator help, and the owner seat
+     * (never revocable, R1) is never duplicated.
+     */
+    public function onboardOwner(string $appName, string $deviceId, ?string $pushToken = null): EnrolledSeat
+    {
+        if ($deviceId === DeviceSubscription::FALLBACK_DEVICE_ID) {
+            throw SyncException::fallbackDeviceRejected();
+        }
+
+        return DB::transaction(function () use ($appName, $deviceId, $pushToken): EnrolledSeat {
+            /** @var DeviceSubscription|null $device */
+            $device = DeviceSubscription::query()
+                ->forDevice($deviceId, $appName)
+                ->lockForUpdate()
+                ->first();
+
+            if ($device === null || ! $device->is_verified) {
+                throw SyncException::subscriptionRequired();
+            }
+
+            // Idempotent recovery: rotate the existing owner seat's credential.
+            $existingOwner = DeviceSeat::query()
+                ->where('app_name', $appName)
+                ->where('device_id', $deviceId)
+                ->where('role', DeviceSeat::ROLE_OWNER)
+                ->first();
+
+            if ($existingOwner !== null) {
+                $generated = $this->tokens->generateSeatToken();
+                $existingOwner->forceFill([
+                    'prefix' => $generated->prefix,
+                    'token_hash' => $generated->hash,
+                    'push_token' => $pushToken ?? $existingOwner->push_token,
+                    'last_used_at' => Carbon::now(),
+                    'revoked_at' => null,
+                ])->save();
+
+                $business = $existingOwner->business()->firstOrFail();
+
+                return new EnrolledSeat(
+                    $existingOwner,
+                    $generated->plaintext,
+                    new BootstrapHandoff((int) $business->last_seq),
+                );
+            }
+
+            // First time: stand up the business from the device's own subscription.
+            $business = DeviceBusiness::query()->create([
+                'app_name' => $appName,
+                'is_verified' => $device->is_verified,
+                'expires_at' => $device->expires_at,
+                'trial_expires_at' => $device->trial_expires_at,
+                'plan_id' => $device->plan_id,
+                'device_allowance' => $this->allowanceFor($device->plan_id),
+                'last_seq' => 0,
+            ]);
+
+            $device->forceFill(['business_id' => $business->id])->save();
+
+            $generated = $this->tokens->generateSeatToken();
+            $seat = DeviceSeat::query()->create([
+                'device_business_id' => $business->id,
+                'app_name' => $appName,
+                'device_id' => $deviceId,
+                'node_id' => DeviceSeat::nodeIdFor($deviceId),
+                'role' => DeviceSeat::ROLE_OWNER,
+                'prefix' => $generated->prefix,
+                'token_hash' => $generated->hash,
+                'push_token' => $pushToken,
+                'last_used_at' => Carbon::now(),
+            ]);
+
+            return new EnrolledSeat($seat, $generated->plaintext, new BootstrapHandoff(0));
+        });
+    }
+
+    /**
+     * The seat allowance a plan grants. Reads the `sync.plan_allowance` map
+     * (plan_id → devices); an unmapped plan falls back to `default_allowance`
+     * (1 — the V1 single-device tier). Wiring richer tiers into provisioning is a
+     * documented follow-up; this keeps the value operator-configurable meanwhile.
+     */
+    private function allowanceFor(?string $planId): int
+    {
+        $map = Config::array('device-subscriptions.sync.plan_allowance');
+        $value = $planId !== null ? ($map[$planId] ?? null) : null;
+
+        return is_int($value) ? $value : Config::integer('device-subscriptions.sync.default_allowance');
+    }
+
+    /**
      * Mint a single-use, short-TTL join token for a business (owner action). The
      * plaintext is returned once for the owner to render as a QR; only its hash is
      * stored. A bootstrap snapshot may be attached afterwards via {@see attachBootstrap()}.

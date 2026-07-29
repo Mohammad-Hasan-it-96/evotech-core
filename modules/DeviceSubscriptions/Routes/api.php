@@ -163,6 +163,13 @@ Route::prefix('api/v1')
 Route::prefix('api/v1/sync')
     ->name('api.v1.sync.')
     ->group(function (): void {
+        // Public owner-onboarding: a licensed device stands up its sync business
+        // and gets its owner seat token (authenticated by its licensing identity,
+        // it has no seat yet). The head of the enrollment chain.
+        Route::post('business', [SyncEnrollmentController::class, 'establish'])
+            ->middleware('throttle:sync')
+            ->name('business.establish');
+
         // Public joiner entry point (throttled per IP).
         Route::post('enroll', [SyncEnrollmentController::class, 'enroll'])
             ->middleware('throttle:sync')
