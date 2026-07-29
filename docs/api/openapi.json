@@ -8127,6 +8127,62 @@
                 }
             }
         },
+        "/v1/sync/business": {
+            "post": {
+                "operationId": "v1.sync.business.establish",
+                "description": "Stands up (or recovers) the caller device's sync business and returns its\nowner seat token. This is the entry point for the whole feature: it is what\na licensed single device calls to enable multi-device, before any join token\nor seat exists. Authenticated by the device's licensing identity, not a sync\nseat (it has none yet).",
+                "summary": "POST /api/v1/sync/business \u2014 owner onboarding (public, licensing identity)",
+                "tags": [
+                    "SyncEnrollment"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "app_name": {
+                                        "type": "string",
+                                        "maxLength": 50
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "maxLength": 200
+                                    },
+                                    "push_token": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 255
+                                    }
+                                },
+                                "required": [
+                                    "app_name",
+                                    "device_id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/v1/sync/enroll": {
             "post": {
                 "operationId": "v1.sync.enroll",
