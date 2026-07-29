@@ -76,28 +76,30 @@ final class SyncChangeController extends SyncController
             'limit' => ['nullable', 'integer', 'min:1', 'max:'.$maxLimit],
         ]);
 
-        $page = $this->changes->pull(
-            $this->businessId(),
-            $this->nodeId(),
-            $request->integer('cursor'),
-            $request->integer('limit', $defaultLimit),
-        );
+        return $this->guardSync(function () use ($request, $defaultLimit): JsonResponse {
+            $page = $this->changes->pull(
+                $this->businessId(),
+                $this->nodeId(),
+                $request->integer('cursor'),
+                $request->integer('limit', $defaultLimit),
+            );
 
-        return ApiResponse::success(
-            array_map(fn (DeviceChange $c): array => [
-                'seq' => $c->seq,
-                'row_uuid' => $c->row_uuid,
-                'table_name' => $c->table_name,
-                'op' => $c->op,
-                'origin_device' => $c->origin_device,
-                'authored_hlc' => $c->authored_hlc,
-                'payload' => $c->payload,
-            ], $page->changes),
-            meta: [
-                'next_cursor' => $page->nextCursor,
-                'has_more' => $page->hasMore,
-            ],
-        );
+            return ApiResponse::success(
+                array_map(fn (DeviceChange $c): array => [
+                    'seq' => $c->seq,
+                    'row_uuid' => $c->row_uuid,
+                    'table_name' => $c->table_name,
+                    'op' => $c->op,
+                    'origin_device' => $c->origin_device,
+                    'authored_hlc' => $c->authored_hlc,
+                    'payload' => $c->payload,
+                ], $page->changes),
+                meta: [
+                    'next_cursor' => $page->nextCursor,
+                    'has_more' => $page->hasMore,
+                ],
+            );
+        });
     }
 
     /**

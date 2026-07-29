@@ -246,8 +246,20 @@ response instead of delete-after-send.
 - `DeviceSyncEnrollmentTest` — owner-only mint; enroll returns seat + bootstrap cursor; allowance/fallback/single-use/owner-non-revocable rules; revoked seat → `check_device` NOT verified; the 3-device distinguishing bootstrap case.
 - `DeviceSyncPushPullTest` — monotonic gap-free seqs; per-row idempotency; no-echo; the examined-not-returned watermark; per-business isolation; LWW by HLC under out-of-order arrival; the data-only doorbell to siblings only.
 
-## Follow-ups (out of the first PR)
+## Retention (Decision 14)
 
-- **Retention/pruning** of the change log and a `cursor_too_old` re-bootstrap path (Decision 14) — decided, not yet built. The `SyncException::cursorTooOld()` code exists for it.
-- **S3 snapshot delivery** — the download assumes a local disk for delete-after-send.
-- Wire the sync tiers into subscription provisioning (a business's `device_allowance` from its plan).
+The oplog is append-only and would grow unbounded, so it is pruned to a window.
+Each business carries a `pruned_through_seq` watermark; a daily command
+`device-subscriptions:prune-sync-changes` (config `sync.retention_days`, default
+60; `--days=` to override; 0 disables) deletes that business's changes **at or
+below the highest too-old `seq`** — pruning by seq, not timestamp, so the retained
+set stays a **contiguous** range above the watermark. `pull` throws
+`cursor_too_old` (409) when `cursor < pruned_through_seq`: a device offline longer
+than the window has missed changes the log no longer holds, so it re-bootstraps via
+a snapshot (§13) rather than concluding "nothing changed". The watermark only ever
+advances, so a device once told to re-bootstrap is never told it is fine again.
+
+## Follow-ups
+
+- **S3 snapshot delivery** — the bootstrap download assumes a local disk for delete-after-send; the single-VPS prod uses local storage, so this is only needed if delivery moves to S3.
+- Wire the sync tiers into subscription provisioning (a business's `device_allowance` from its plan) rather than the `sync.plan_allowance` config map.

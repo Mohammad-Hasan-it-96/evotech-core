@@ -23,6 +23,7 @@ use Modules\Core\Domain\Concerns\HasUuid;
  * @property string|null $plan_id
  * @property int $device_allowance
  * @property int $last_seq
+ * @property int $pruned_through_seq
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -41,6 +42,7 @@ class DeviceBusiness extends Model
         'plan_id',
         'device_allowance',
         'last_seq',
+        'pruned_through_seq',
     ];
 
     /**
@@ -54,6 +56,7 @@ class DeviceBusiness extends Model
             'trial_expires_at' => 'datetime',
             'device_allowance' => 'integer',
             'last_seq' => 'integer',
+            'pruned_through_seq' => 'integer',
         ];
     }
 
