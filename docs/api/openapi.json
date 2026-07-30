@@ -8084,36 +8084,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {}
-                                        },
-                                        "meta": {
-                                            "type": "object",
-                                            "properties": {
-                                                "next_cursor": {
-                                                    "type": "integer"
-                                                },
-                                                "has_more": {
-                                                    "type": "boolean"
-                                                }
-                                            },
-                                            "required": [
-                                                "next_cursor",
-                                                "has_more"
-                                            ]
-                                        },
-                                        "links": {
-                                            "type": "string"
-                                        }
-                                    },
-                                    "required": [
-                                        "data",
-                                        "meta",
-                                        "links"
-                                    ]
+                                    "type": "object"
                                 }
                             }
                         }

@@ -117,6 +117,14 @@ return [
         'snapshot_max_kb' => (int) env('DEVICE_SYNC_SNAPSHOT_MAX_KB', 51200),
         'pull_limit' => (int) env('DEVICE_SYNC_PULL_LIMIT', 200),
         'pull_max_limit' => (int) env('DEVICE_SYNC_PULL_MAX_LIMIT', 500),
+        /*
+         * Change-log retention window in days (ADR 0011, Decision 14). The daily
+         * prune removes changes older than this; a device offline longer than the
+         * window cannot catch up incrementally and re-bootstraps via a snapshot.
+         * 0 disables pruning (keep the whole log). Wide by default — a phone away
+         * for two months is a re-provision, not a routine sync.
+         */
+        'retention_days' => (int) env('DEVICE_SYNC_RETENTION_DAYS', 60),
         'default_allowance' => (int) env('DEVICE_SYNC_DEFAULT_ALLOWANCE', 1),
         'tiers' => [
             'solo' => 1,

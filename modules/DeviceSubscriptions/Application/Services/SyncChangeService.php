@@ -2,10 +2,12 @@
 
 namespace Modules\DeviceSubscriptions\Application\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Modules\DeviceSubscriptions\Application\DTO\AppliedChange;
 use Modules\DeviceSubscriptions\Application\DTO\PullPage;
 use Modules\DeviceSubscriptions\Application\DTO\PushResult;
+use Modules\DeviceSubscriptions\Domain\Exceptions\SyncException;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceBusiness;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceChange;
 
@@ -101,6 +103,20 @@ final class SyncChangeService
      */
     public function pull(int $businessId, string $originDevice, int $cursor, int $limit): PullPage
     {
+        // Fallen off the retained window (§14): the device's cursor sits below the
+        // pruned watermark, so the changes it still needs (cursor+1 … pruned) are
+        // gone from the log. "Nothing changed" and "you fell off the log" must not
+        // look identical, so this is a distinct signal, never an empty page — the
+        // client re-seeds from a fresh snapshot (§13) instead of silently diverging.
+        $prunedThrough = DeviceBusiness::query()
+            ->whereKey($businessId)
+            ->firstOrFail()
+            ->pruned_through_seq;
+
+        if ($cursor < $prunedThrough) {
+            throw SyncException::cursorTooOld();
+        }
+
         // Examine a contiguous window by seq; fetch one extra to detect hasMore.
         $window = DeviceChange::query()
             ->where('device_business_id', $businessId)
@@ -140,5 +156,53 @@ final class SyncChangeService
             ->where('row_uuid', $rowUuid)
             ->orderByDesc('authored_hlc')
             ->first();
+    }
+
+    /**
+     * Prune a business's change log of everything older than `$cutoff` (ADR 0011,
+     * Decision 14). Returns the number of rows removed.
+     *
+     * Deletes by `seq <= maxOldSeq` — the highest seq among the too-old rows —
+     * NOT by timestamp directly, so the retained set stays a **contiguous** range
+     * above `pruned_through_seq`. That contiguity is exactly what `pull`'s
+     * cursor-too-old check relies on: everything above the watermark is present,
+     * so a cursor at or above it can always catch up incrementally. seq order is
+     * server-insert order, which is also created_at order, so the two agree.
+     *
+     * The watermark only ever advances (a re-run with a later cutoff prunes more);
+     * it is never lowered, so a device that was told `cursor_too_old` cannot later
+     * be told it is fine again.
+     */
+    public function prune(int $businessId, Carbon $cutoff): int
+    {
+        return DB::transaction(function () use ($businessId, $cutoff): int {
+            $business = DeviceBusiness::query()
+                ->whereKey($businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $maxOldSeq = DeviceChange::query()
+                ->where('device_business_id', $businessId)
+                ->where('created_at', '<', $cutoff)
+                ->max('seq');
+
+            // Null (no too-old rows), or a non-numeric driver result — nothing to do.
+            if (! is_numeric($maxOldSeq)) {
+                return 0;
+            }
+
+            $maxSeq = (int) $maxOldSeq;
+
+            $deleted = DeviceChange::query()
+                ->where('device_business_id', $businessId)
+                ->where('seq', '<=', $maxSeq)
+                ->delete();
+
+            if ($maxSeq > $business->pruned_through_seq) {
+                $business->forceFill(['pruned_through_seq' => $maxSeq])->save();
+            }
+
+            return is_int($deleted) ? $deleted : 0;
+        });
     }
 }
