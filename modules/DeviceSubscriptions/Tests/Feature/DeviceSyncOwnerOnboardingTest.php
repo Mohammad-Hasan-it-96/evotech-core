@@ -3,8 +3,8 @@
 namespace Modules\DeviceSubscriptions\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Config;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceBusiness;
+use Modules\DeviceSubscriptions\Domain\Models\DevicePlan;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSeat;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 use Modules\DeviceSubscriptions\Tests\Feature\Concerns\InteractsWithSync;
@@ -110,7 +110,9 @@ class DeviceSyncOwnerOnboardingTest extends TestCase
 
     public function test_the_allowance_comes_from_the_plan_and_admits_a_member(): void
     {
-        Config::set('device-subscriptions.sync.plan_allowance', ['yearly' => 3]);
+        // The tier is a property of the plan (Decision 3): retier 'yearly' to 3.
+        DevicePlan::query()->whereNull('device_app_id')->where('plan_key', 'yearly')
+            ->update(['device_allowance' => 3]);
 
         $deviceId = $this->deviceId('owner-device');
         $this->licensedDevice($deviceId); // active() puts it on the 'yearly' plan

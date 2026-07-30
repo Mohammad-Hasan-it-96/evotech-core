@@ -33,6 +33,7 @@ final class DeviceCatalogService
             'device_app_id' => $plan->device_app_id,
             'price' => $plan->price,
             'duration_months' => $plan->duration_months,
+            'device_allowance' => $plan->device_allowance,
         ]);
 
         $this->store->flush();
@@ -45,14 +46,14 @@ final class DeviceCatalogService
      */
     public function updatePlan(DevicePlan $plan, array $attributes): DevicePlan
     {
-        $before = $plan->only(['title', 'price', 'price_after_discount', 'duration_months', 'enabled', 'recommended']);
+        $before = $plan->only(['title', 'price', 'price_after_discount', 'duration_months', 'device_allowance', 'enabled', 'recommended']);
 
         $plan->update($attributes);
 
         $this->audit->log('device_plan.updated', 'device_plan', $plan->uuid, [
             'key' => $plan->plan_key,
             'before' => $before,
-            'after' => $plan->only(['title', 'price', 'price_after_discount', 'duration_months', 'enabled', 'recommended']),
+            'after' => $plan->only(['title', 'price', 'price_after_discount', 'duration_months', 'device_allowance', 'enabled', 'recommended']),
         ]);
 
         $this->store->flush();

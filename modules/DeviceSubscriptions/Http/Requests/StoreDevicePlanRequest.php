@@ -42,6 +42,14 @@ class StoreDevicePlanRequest extends FormRequest
              */
             'duration_months' => ['required', 'integer', 'min:1', 'max:120'],
 
+            /*
+             * The device tier the plan sells (ADR 0011): how many devices one
+             * subscription may run at once. Omitted = 1, the single-device default
+             * every plan had before tiers existed. Capped well above the shipped
+             * 1/3/5 so an operator can price a larger seat without a code change.
+             */
+            'device_allowance' => ['sometimes', 'integer', 'min:1', 'max:99'],
+
             'price' => ['required', 'numeric', 'min:0', 'max:99999999'],
 
             // A "discount" above the price would display as an increase in the app.

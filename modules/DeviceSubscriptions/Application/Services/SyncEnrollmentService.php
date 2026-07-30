@@ -14,6 +14,7 @@ use Modules\DeviceSubscriptions\Application\Support\SyncTokenGenerator;
 use Modules\DeviceSubscriptions\Domain\Exceptions\SyncException;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceBusiness;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceJoinToken;
+use Modules\DeviceSubscriptions\Domain\Models\DevicePlan;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSeat;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 
@@ -168,7 +169,7 @@ final class SyncEnrollmentService
                 'expires_at' => $device->expires_at,
                 'trial_expires_at' => $device->trial_expires_at,
                 'plan_id' => $device->plan_id,
-                'device_allowance' => $this->allowanceFor($device->plan_id),
+                'device_allowance' => $this->allowanceFor($appName, $device->plan_id),
                 'last_seq' => 0,
             ]);
 
@@ -192,13 +193,23 @@ final class SyncEnrollmentService
     }
 
     /**
-     * The seat allowance a plan grants. Reads the `sync.plan_allowance` map
-     * (plan_id → devices); an unmapped plan falls back to `default_allowance`
-     * (1 — the V1 single-device tier). Wiring richer tiers into provisioning is a
-     * documented follow-up; this keeps the value operator-configurable meanwhile.
+     * The seat allowance a business's plan grants (ADR 0011, Decision 3).
+     *
+     * The plan's own `device_allowance` is the source of truth — set on the plan
+     * in the dashboard, so a tier is provisioned like any other plan attribute. Two
+     * fallbacks remain, in order, for the cases where a plan row cannot be resolved:
+     * the operator `sync.plan_allowance` override map (a legacy knob, kept so a value
+     * set before this wiring is never silently dropped), then the single-device
+     * `default_allowance`. A trial owner with no plan takes the default until they buy.
      */
-    private function allowanceFor(?string $planId): int
+    private function allowanceFor(string $appName, ?string $planId): int
     {
+        $fromPlan = DevicePlan::allowanceFor($planId, $appName);
+
+        if ($fromPlan !== null) {
+            return max(1, $fromPlan);
+        }
+
         $map = Config::array('device-subscriptions.sync.plan_allowance');
         $value = $planId !== null ? ($map[$planId] ?? null) : null;
 

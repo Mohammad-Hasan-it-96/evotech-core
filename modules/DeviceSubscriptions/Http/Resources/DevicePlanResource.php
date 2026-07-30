@@ -39,6 +39,9 @@ final class DevicePlanResource extends JsonResource
             'title' => $this->title,
             'description' => $this->description,
             'duration_months' => $this->duration_months,
+            // The device tier this plan sells (ADR 0011). Admin-only — deliberately
+            // absent from DevicePlan::toLegacyArray(), the shipped getPlans contract.
+            'device_allowance' => $this->device_allowance,
             'price' => (float) $this->price,
             'price_after_discount' => $this->price_after_discount === null
                 ? null
