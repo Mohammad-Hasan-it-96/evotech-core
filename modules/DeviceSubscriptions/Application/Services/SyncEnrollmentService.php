@@ -69,12 +69,13 @@ final class SyncEnrollmentService
         ?Carbon $expiresAt = null,
         ?string $planId = null,
         ?string $pushToken = null,
+        ?string $name = null,
     ): EnrolledSeat {
         if ($deviceId === DeviceSubscription::FALLBACK_DEVICE_ID) {
             throw SyncException::fallbackDeviceRejected();
         }
 
-        return DB::transaction(function () use ($appName, $deviceId, $deviceAllowance, $verified, $expiresAt, $planId, $pushToken): EnrolledSeat {
+        return DB::transaction(function () use ($appName, $deviceId, $deviceAllowance, $verified, $expiresAt, $planId, $pushToken, $name): EnrolledSeat {
             $business = DeviceBusiness::query()->create([
                 'app_name' => $appName,
                 'is_verified' => $verified,
@@ -92,6 +93,7 @@ final class SyncEnrollmentService
                 'device_id' => $deviceId,
                 'node_id' => DeviceSeat::nodeIdFor($deviceId),
                 'role' => DeviceSeat::ROLE_OWNER,
+                'name' => DeviceSeat::normalizeName($name),
                 'prefix' => $generated->prefix,
                 'token_hash' => $generated->hash,
                 'push_token' => $pushToken,
@@ -119,13 +121,13 @@ final class SyncEnrollmentService
      * reinstall or a lost token recovers without operator help, and the owner seat
      * (never revocable, R1) is never duplicated.
      */
-    public function onboardOwner(string $appName, string $deviceId, ?string $pushToken = null): EnrolledSeat
+    public function onboardOwner(string $appName, string $deviceId, ?string $pushToken = null, ?string $name = null): EnrolledSeat
     {
         if ($deviceId === DeviceSubscription::FALLBACK_DEVICE_ID) {
             throw SyncException::fallbackDeviceRejected();
         }
 
-        return DB::transaction(function () use ($appName, $deviceId, $pushToken): EnrolledSeat {
+        return DB::transaction(function () use ($appName, $deviceId, $pushToken, $name): EnrolledSeat {
             /** @var DeviceSubscription|null $device */
             $device = DeviceSubscription::query()
                 ->forDevice($deviceId, $appName)
@@ -149,6 +151,9 @@ final class SyncEnrollmentService
                     'prefix' => $generated->prefix,
                     'token_hash' => $generated->hash,
                     'push_token' => $pushToken ?? $existingOwner->push_token,
+                    // A re-onboard (reinstall / lost token) may re-propose a name,
+                    // but an owner-chosen name always wins — only fill a blank one.
+                    'name' => $existingOwner->name ?? DeviceSeat::normalizeName($name),
                     'last_used_at' => Carbon::now(),
                     'revoked_at' => null,
                 ])->save();
@@ -182,6 +187,7 @@ final class SyncEnrollmentService
                 'device_id' => $deviceId,
                 'node_id' => DeviceSeat::nodeIdFor($deviceId),
                 'role' => DeviceSeat::ROLE_OWNER,
+                'name' => DeviceSeat::normalizeName($name),
                 'prefix' => $generated->prefix,
                 'token_hash' => $generated->hash,
                 'push_token' => $pushToken,
@@ -265,7 +271,7 @@ final class SyncEnrollmentService
      * consuming a second seat. The seat's `app_name` is taken from the business,
      * never from the joining device.
      */
-    public function enroll(string $joinTokenPlaintext, string $deviceId, ?string $pushToken = null): EnrolledSeat
+    public function enroll(string $joinTokenPlaintext, string $deviceId, ?string $pushToken = null, ?string $name = null): EnrolledSeat
     {
         if ($deviceId === DeviceSubscription::FALLBACK_DEVICE_ID) {
             throw SyncException::fallbackDeviceRejected();
@@ -277,7 +283,7 @@ final class SyncEnrollmentService
             throw SyncException::invalidJoinToken();
         }
 
-        return DB::transaction(function () use ($token, $deviceId, $pushToken): EnrolledSeat {
+        return DB::transaction(function () use ($token, $deviceId, $pushToken, $name): EnrolledSeat {
             $business = DeviceBusiness::query()
                 ->whereKey($token->device_business_id)
                 ->lockForUpdate()
@@ -295,12 +301,18 @@ final class SyncEnrollmentService
             $generated = $this->tokens->generateSeatToken();
 
             $seat = $existing ?? new DeviceSeat;
+            // A re-enroll keeps any owner-set name; a fresh seat takes the joiner's
+            // proposal (its phone model, typically).
+            $resolvedName = $existing !== null
+                ? ($existing->name ?? DeviceSeat::normalizeName($name))
+                : DeviceSeat::normalizeName($name);
             $seat->forceFill([
                 'device_business_id' => $business->id,
                 'app_name' => $business->app_name,
                 'device_id' => $deviceId,
                 'node_id' => DeviceSeat::nodeIdFor($deviceId),
                 'role' => DeviceSeat::ROLE_MEMBER,
+                'name' => $resolvedName,
                 'prefix' => $generated->prefix,
                 'token_hash' => $generated->hash,
                 'push_token' => $pushToken,
@@ -328,6 +340,18 @@ final class SyncEnrollmentService
         if ($seat->revoked_at === null) {
             $seat->forceFill(['revoked_at' => Carbon::now()])->save();
         }
+
+        return $seat;
+    }
+
+    /**
+     * Rename a seat (owner action). Unlike revoke, the owner seat is a valid
+     * target — an owner names its own till. The name is normalised (trimmed,
+     * capped, blank → null), so passing null or "" clears it back to unnamed.
+     */
+    public function renameSeat(DeviceSeat $seat, ?string $name): DeviceSeat
+    {
+        $seat->forceFill(['name' => DeviceSeat::normalizeName($name)])->save();
 
         return $seat;
     }

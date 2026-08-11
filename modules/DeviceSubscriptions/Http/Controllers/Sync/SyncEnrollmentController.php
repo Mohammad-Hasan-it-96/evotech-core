@@ -43,6 +43,7 @@ final class SyncEnrollmentController extends SyncController
             'app_name' => ['required', 'string', 'max:50'],
             'device_id' => ['required', 'string', 'max:200'],
             'push_token' => ['nullable', 'string', 'max:255'],
+            'name' => ['sometimes', 'nullable', 'string', 'max:191'],
         ]);
 
         return $this->guardSync(function () use ($request): JsonResponse {
@@ -50,6 +51,7 @@ final class SyncEnrollmentController extends SyncController
                 (string) $request->string('app_name'),
                 (string) $request->string('device_id'),
                 $request->filled('push_token') ? (string) $request->string('push_token') : null,
+                $request->filled('name') ? (string) $request->string('name') : null,
             );
 
             $enrolled->seat->loadMissing('business');
@@ -60,6 +62,7 @@ final class SyncEnrollmentController extends SyncController
                     'uuid' => $enrolled->seat->uuid,
                     'role' => $enrolled->seat->role,
                     'device_id' => $enrolled->seat->device_id,
+                    'name' => $enrolled->seat->name,
                 ],
                 'business_uuid' => $enrolled->seat->business->uuid,
                 'device_allowance' => $enrolled->seat->business->device_allowance,
@@ -136,6 +139,7 @@ final class SyncEnrollmentController extends SyncController
             'join_token' => ['required', 'string'],
             'device_id' => ['required', 'string', 'max:200'],
             'push_token' => ['nullable', 'string', 'max:255'],
+            'name' => ['sometimes', 'nullable', 'string', 'max:191'],
         ]);
 
         return $this->guardSync(function () use ($request): JsonResponse {
@@ -143,6 +147,7 @@ final class SyncEnrollmentController extends SyncController
                 (string) $request->string('join_token'),
                 (string) $request->string('device_id'),
                 $request->filled('push_token') ? (string) $request->string('push_token') : null,
+                $request->filled('name') ? (string) $request->string('name') : null,
             );
 
             $enrolled->seat->loadMissing('business');
@@ -153,6 +158,7 @@ final class SyncEnrollmentController extends SyncController
                     'uuid' => $enrolled->seat->uuid,
                     'role' => $enrolled->seat->role,
                     'device_id' => $enrolled->seat->device_id,
+                    'name' => $enrolled->seat->name,
                 ],
                 'business_uuid' => $enrolled->seat->business->uuid,
                 'bootstrap' => [
@@ -174,6 +180,7 @@ final class SyncEnrollmentController extends SyncController
                 'uuid' => $seat->uuid,
                 'device_id' => $seat->device_id,
                 'role' => $seat->role,
+                'name' => $seat->name,
                 'revoked' => ! $seat->isActive(),
                 'last_used_at' => $seat->last_used_at?->toIso8601String(),
                 'created_at' => $seat->created_at?->toIso8601String(),
@@ -198,5 +205,32 @@ final class SyncEnrollmentController extends SyncController
                 'revoked' => true,
             ]);
         });
+    }
+
+    /**
+     * PATCH /api/v1/sync/devices/{seat} — owner sets a seat's display name so the
+     * registry can tell two identical tills apart. Owner-only, same rule as revoke,
+     * but here the owner seat IS a valid target (an owner names its own till). The
+     * name is normalised server-side; a null or empty value clears it. Cross-business
+     * seats 404, never 403 (the feature's isolation invariant).
+     */
+    public function renameDevice(Request $request, DeviceSeat $seat): JsonResponse
+    {
+        $this->requireOwner();
+        $this->assertOwnedByBusiness($seat->device_business_id);
+
+        $request->validate([
+            'name' => ['present', 'nullable', 'string', 'max:191'],
+        ]);
+
+        $renamed = $this->enrollment->renameSeat(
+            $seat,
+            $request->filled('name') ? (string) $request->string('name') : null,
+        );
+
+        return ApiResponse::success([
+            'uuid' => $renamed->uuid,
+            'name' => $renamed->name,
+        ]);
     }
 }

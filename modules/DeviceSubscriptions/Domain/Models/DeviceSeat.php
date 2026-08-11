@@ -25,6 +25,7 @@ use Modules\Core\Domain\Concerns\HasUuid;
  * @property string $device_id
  * @property string $node_id
  * @property string $role
+ * @property string|null $name
  * @property string $prefix
  * @property string $token_hash
  * @property string|null $push_token
@@ -43,6 +44,9 @@ class DeviceSeat extends Model implements AuthenticatableContract
 
     public const ROLE_MEMBER = 'member';
 
+    /** The owner-assigned display name is capped at this many (multibyte) characters. */
+    public const NAME_MAX_LENGTH = 40;
+
     /**
      * @var list<string>
      */
@@ -52,6 +56,7 @@ class DeviceSeat extends Model implements AuthenticatableContract
         'device_id',
         'node_id',
         'role',
+        'name',
         'prefix',
         'token_hash',
         'push_token',
@@ -94,6 +99,28 @@ class DeviceSeat extends Model implements AuthenticatableContract
     public static function nodeIdFor(string $deviceId): string
     {
         return substr($deviceId, 0, 16);
+    }
+
+    /**
+     * Normalise an owner-assigned display name to what the column stores: trimmed,
+     * capped at {@see NAME_MAX_LENGTH} multibyte chars (so Arabic counts as
+     * characters, not bytes), and null when empty after trimming. The server is
+     * authoritative — a proposed name may come back trimmed or truncated, so the
+     * client renders the returned value rather than assuming its own survived.
+     */
+    public static function normalizeName(?string $name): ?string
+    {
+        if ($name === null) {
+            return null;
+        }
+
+        $trimmed = trim($name);
+
+        if ($trimmed === '') {
+            return null;
+        }
+
+        return mb_substr($trimmed, 0, self::NAME_MAX_LENGTH);
     }
 
     /**

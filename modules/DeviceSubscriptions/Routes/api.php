@@ -189,6 +189,8 @@ Route::prefix('api/v1/sync')
                 ->name('join-tokens.bootstrap');
             Route::get('devices', [SyncEnrollmentController::class, 'devices'])
                 ->name('devices.index');
+            Route::patch('devices/{seat}', [SyncEnrollmentController::class, 'renameDevice'])
+                ->name('devices.rename');
             Route::delete('devices/{seat}', [SyncEnrollmentController::class, 'revokeDevice'])
                 ->name('devices.revoke');
 
