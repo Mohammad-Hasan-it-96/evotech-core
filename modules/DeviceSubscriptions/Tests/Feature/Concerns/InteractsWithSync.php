@@ -63,6 +63,17 @@ trait InteractsWithSync
         return $this->postJson($uri, $body, $token !== null ? $this->bearer($token) : []);
     }
 
+    /**
+     * @param  array<string, mixed>  $body
+     * @return TestResponse<JsonResponse>
+     */
+    private function syncPatch(string $uri, array $body, string $token): TestResponse
+    {
+        $this->app['auth']->forgetGuards();
+
+        return $this->patchJson($uri, $body, $this->bearer($token));
+    }
+
     /** @return TestResponse<JsonResponse> */
     private function syncDelete(string $uri, string $token): TestResponse
     {

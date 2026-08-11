@@ -72,12 +72,13 @@ actions additionally require the owner seat.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/business` | **licensing identity** | **Owner onboarding** — a licensed single device stands up (or recovers) its sync business and gets its owner seat token. The head of the chain: without it no owner seat, no join token, no member. Requires a verified subscription (`SUBSCRIPTION_REQUIRED` otherwise); idempotent (re-call rotates the owner token). |
-| POST | `/enroll` | **public** | A joining device redeems a join token — it has no seat yet, so it proves itself with the single-use token in its body. Returns its `sync_token` (once) + the bootstrap handoff. |
+| POST | `/business` | **licensing identity** | **Owner onboarding** — a licensed single device stands up (or recovers) its sync business and gets its owner seat token. The head of the chain: without it no owner seat, no join token, no member. Requires a verified subscription (`SUBSCRIPTION_REQUIRED` otherwise); idempotent (re-call rotates the owner token). May propose a seat `name` (an owner-set name is never overwritten by a re-onboard). |
+| POST | `/enroll` | **public** | A joining device redeems a join token — it has no seat yet, so it proves itself with the single-use token in its body. Returns its `sync_token` (once) + the bootstrap handoff. May propose a seat `name`. |
 | GET | `/bootstrap/{joinToken}` | **signed** | The bootstrap snapshot download. Credential-less: the short-lived signature minted for the enrolling device *is* the authorization (ADR 0008 style). Deleted after it is sent. |
 | POST | `/join-tokens` | owner | Mint a single-use, short-TTL join token (rendered as a QR). |
 | POST | `/join-tokens/{joinToken}/bootstrap` | owner | Attach the bootstrap snapshot + cursor `C` + SHA-256 to a token. |
-| GET | `/devices` | seat | The business's seats (any authenticated device). |
+| GET | `/devices` | seat | The business's seats (any authenticated device). Each seat carries its `name` (nullable). |
+| PATCH | `/devices/{seat}` | owner | Set a seat's display `name` (the owner seat included). Trimmed, capped at 40 chars, blank → null; not unique. |
 | DELETE | `/devices/{seat}` | owner | Revoke a member seat. |
 | POST | `/changes` | seat | Push a batch of local edits. |
 | GET | `/changes` | seat | Pull changes this device has not yet seen (`?cursor=&limit=`). |
@@ -205,7 +206,7 @@ enroll and push.
 |---|---|
 | `device_businesses` | The owner aggregate: `uuid`, `app_name`, `is_verified`, `expires_at`/`trial_expires_at`, `plan_id`, `device_allowance`, `last_seq`. Non-tenant; the scoping key. |
 | `device_subscriptions.business_id` | Nullable FK linking a legacy device row to its business. |
-| `device_seats` | Per-device seat + sync credential: `node_id`, `role` (`owner`/`member`), `prefix`+`token_hash`, `push_token`, `revoked_at`. `unique(device_business_id, device_id)`. |
+| `device_seats` | Per-device seat + sync credential: `node_id`, `role` (`owner`/`member`), `name` (nullable, owner-editable display label), `prefix`+`token_hash`, `push_token`, `revoked_at`. `unique(device_business_id, device_id)`. |
 | `device_changes` | Append-only oplog: `seq`, `row_uuid`, `table_name`, `op`, `origin_device`, `authored_hlc`, `idempotency_key`, `payload`. `unique(device_business_id, seq)` and `unique(device_business_id, idempotency_key)`. `created_at` only — no `updated_at`. |
 | `device_join_tokens` | Single-use enrollment + bootstrap handoff: `token_hash`, `bootstrap_cursor`, `snapshot_path`, `snapshot_sha256`, `expires_at`, `consumed_at`. |
 
