@@ -8127,6 +8127,13 @@
                                             "null"
                                         ],
                                         "maxLength": 255
+                                    },
+                                    "name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 191
                                     }
                                 },
                                 "required": [
@@ -8181,6 +8188,13 @@
                                             "null"
                                         ],
                                         "maxLength": 255
+                                    },
+                                    "name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 191
                                     }
                                 },
                                 "required": [
@@ -8382,6 +8396,12 @@
                                                     "role": {
                                                         "type": "string"
                                                     },
+                                                    "name": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
                                                     "revoked": {
                                                         "type": "boolean"
                                                     },
@@ -8396,6 +8416,7 @@
                                                     "uuid",
                                                     "device_id",
                                                     "role",
+                                                    "name",
                                                     "revoked",
                                                     "last_used_at",
                                                     "created_at"
@@ -8425,6 +8446,98 @@
             }
         },
         "/v1/sync/devices/{seat}": {
+            "patch": {
+                "operationId": "v1.sync.devices.rename",
+                "summary": "PATCH /api/v1/sync/devices/{seat} \u2014 owner sets a seat's display name so the\nregistry can tell two identical tills apart. Owner-only, same rule as revoke,\nbut here the owner seat IS a valid target (an owner names its own till). The\nname is normalised server-side; a null or empty value clears it. Cross-business\nseats 404, never 403 (the feature's isolation invariant)",
+                "tags": [
+                    "SyncEnrollment"
+                ],
+                "parameters": [
+                    {
+                        "name": "seat",
+                        "in": "path",
+                        "required": true,
+                        "description": "The seat UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 191
+                                    }
+                                },
+                                "required": [
+                                    "name"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "uuid": {
+                                                    "type": "string"
+                                                },
+                                                "name": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "uuid",
+                                                "name"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "string"
+                                        },
+                                        "links": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "meta",
+                                        "links"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
             "delete": {
                 "operationId": "v1.sync.devices.revoke",
                 "summary": "DELETE /api/v1/sync/devices/{seat} \u2014 owner revokes a member seat. The owner\nseat is refused (R1); revocation is not a remote wipe (R2)",
