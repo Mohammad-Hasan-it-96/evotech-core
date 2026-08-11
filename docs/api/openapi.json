@@ -8962,6 +8962,10 @@
                     "duration_months": {
                         "type": "integer"
                     },
+                    "device_allowance": {
+                        "type": "integer",
+                        "description": "The device tier this plan sells (ADR 0011). Admin-only \u2014 deliberately\nabsent from DevicePlan::toLegacyArray(), the shipped getPlans contract."
+                    },
                     "price": {
                         "type": "number"
                     },
@@ -8988,6 +8992,7 @@
                     "title",
                     "description",
                     "duration_months",
+                    "device_allowance",
                     "price",
                     "price_after_discount",
                     "enabled",
@@ -10361,6 +10366,12 @@
                         "minimum": 1,
                         "maximum": 120
                     },
+                    "device_allowance": {
+                        "type": "integer",
+                        "description": "The device tier the plan sells (ADR 0011): how many devices one\nsubscription may run at once. Omitted = 1, the single-device default\nevery plan had before tiers existed. Capped well above the shipped\n1/3/5 so an operator can price a larger seat without a code change.",
+                        "minimum": 1,
+                        "maximum": 99
+                    },
                     "price": {
                         "type": "number",
                         "minimum": 0,
@@ -10780,6 +10791,12 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 120
+                    },
+                    "device_allowance": {
+                        "type": "integer",
+                        "description": "The device tier (ADR 0011); see StoreDevicePlanRequest. Editable \u2014\nchanging it re-tiers a plan and only affects businesses onboarded after.",
+                        "minimum": 1,
+                        "maximum": 99
                     },
                     "price": {
                         "type": "number",

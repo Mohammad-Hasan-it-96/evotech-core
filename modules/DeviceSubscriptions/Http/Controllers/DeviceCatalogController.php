@@ -136,6 +136,7 @@ final class DeviceCatalogController extends ApiController
             'title' => $request->string('title')->value(),
             'description' => $request->input('description'),
             'duration_months' => $request->integer('duration_months'),
+            'device_allowance' => $request->integer('device_allowance', 1),
             'price' => $request->input('price'),
             'price_after_discount' => $request->input('price_after_discount'),
             'enabled' => $request->boolean('enabled', true),

@@ -31,6 +31,9 @@ class UpdateDevicePlanRequest extends FormRequest
             'title' => ['sometimes', 'string', 'max:150'],
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'duration_months' => ['sometimes', 'integer', 'min:1', 'max:120'],
+            // The device tier (ADR 0011); see StoreDevicePlanRequest. Editable —
+            // changing it re-tiers a plan and only affects businesses onboarded after.
+            'device_allowance' => ['sometimes', 'integer', 'min:1', 'max:99'],
             'price' => ['sometimes', 'numeric', 'min:0', 'max:99999999'],
             'price_after_discount' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'enabled' => ['sometimes', 'boolean'],

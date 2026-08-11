@@ -16,6 +16,7 @@ use Modules\Core\Domain\Concerns\HasUuid;
  * @property string $title
  * @property string|null $description
  * @property int $duration_months
+ * @property int $device_allowance
  * @property string $price
  * @property string|null $price_after_discount
  * @property bool $enabled
@@ -32,6 +33,7 @@ class DevicePlan extends Model
         'title',
         'description',
         'duration_months',
+        'device_allowance',
         'price',
         'price_after_discount',
         'enabled',
@@ -43,6 +45,7 @@ class DevicePlan extends Model
     {
         return [
             'duration_months' => 'int',
+            'device_allowance' => 'int',
             'price' => 'decimal:2',
             'price_after_discount' => 'decimal:2',
             'enabled' => 'bool',
@@ -55,6 +58,49 @@ class DevicePlan extends Model
     public function app(): BelongsTo
     {
         return $this->belongsTo(DeviceApp::class, 'device_app_id');
+    }
+
+    /**
+     * The device allowance the plan `$planKey` grants within `$appName`'s catalog,
+     * or null when no such plan exists (ADR 0011, Decision 3). This is the primary
+     * source for a business's seat allowance at owner onboarding.
+     *
+     * Resolution mirrors {@see DevicePlanCatalog::plans()}: an app with its OWN
+     * catalog is read only there (no shared fallback for a missing key — the same
+     * all-or-nothing rule that keeps a key from resolving against the wrong app's
+     * duration); every other app, and the app-less shared scope, reads the shared
+     * list. The key comparison is exact; the app name is matched case-insensitively,
+     * as the device API matches it elsewhere.
+     */
+    public static function allowanceFor(?string $planKey, ?string $appName = null): ?int
+    {
+        if ($planKey === null || $planKey === '') {
+            return null;
+        }
+
+        $appId = null;
+
+        if ($appName !== null && $appName !== '') {
+            /** @var DeviceApp|null $app */
+            $app = DeviceApp::query()
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($appName)])
+                ->first();
+
+            if ($app !== null && ! $app->uses_shared_plans) {
+                $appId = $app->id;
+            }
+        }
+
+        $plan = self::query()
+            ->where('plan_key', $planKey)
+            ->when(
+                $appId === null,
+                fn ($query) => $query->whereNull('device_app_id'),
+                fn ($query) => $query->where('device_app_id', $appId),
+            )
+            ->first();
+
+        return $plan?->device_allowance;
     }
 
     /**

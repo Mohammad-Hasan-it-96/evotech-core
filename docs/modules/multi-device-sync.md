@@ -96,7 +96,9 @@ device (`SUBSCRIPTION_REQUIRED` otherwise), then idempotently: creates the
 `device_businesses` row seeded from the device's own subscription (expiry, trial,
 plan, verification), links `device_subscriptions.business_id`, and mints the owner
 seat — returning its durable sync token once. `device_allowance` comes from the
-plan (`config('device-subscriptions.sync.plan_allowance')`, unmapped → `default_allowance`).
+**plan the subscription holds** — `device_plans.device_allowance` (a dashboard-set
+column, default 1) via `DevicePlan::allowanceFor()` — falling back to the legacy
+`sync.plan_allowance` override map and then `default_allowance` only when no plan row resolves.
 Re-calling it **rotates** the owner token rather than creating a second business, so
 a reinstall or lost token self-recovers and the non-revocable owner seat (R1) is
 never duplicated. `establishBusiness()` on the service remains a lower-level
@@ -218,8 +220,8 @@ enroll and push.
 | `snapshot_disk` | `device-sync` | The **private** disk snapshots are staged on. |
 | `snapshot_max_kb` | 51200 | Upload cap for a bootstrap snapshot. |
 | `pull_limit` / `pull_max_limit` | 200 / 500 | Default and hard-capped pull page size. |
-| `default_allowance` | 1 | Fallback seat allowance. |
-| `tiers` | `solo`=1, `trio`=3, `team`=5 | `plan_id` → device allowance. |
+| `default_allowance` | 1 | Seat allowance when no plan row resolves (last fallback). |
+| `plan_allowance` | `[]` | Legacy `plan_id` → allowance override; consulted only when a plan row is unresolvable. The tier now lives on the plan (`device_plans.device_allowance`). |
 
 The `device-sync` disk (`config/filesystems.php`) is private/local by default; point
 it at S3 for production, at which point the download would become a streamed
@@ -262,4 +264,3 @@ advances, so a device once told to re-bootstrap is never told it is fine again.
 ## Follow-ups
 
 - **S3 snapshot delivery** — the bootstrap download assumes a local disk for delete-after-send; the single-VPS prod uses local storage, so this is only needed if delivery moves to S3.
-- Wire the sync tiers into subscription provisioning (a business's `device_allowance` from its plan) rather than the `sync.plan_allowance` config map.

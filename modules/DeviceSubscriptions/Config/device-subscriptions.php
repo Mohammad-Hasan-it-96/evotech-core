@@ -107,8 +107,11 @@ return [
      *   consumed (Decision 13 — snapshots are never retained).
      * `pull_limit` / `pull_max_limit` — default and hard-capped page size for a
      *   pull, so one poll cannot ask for an unbounded window.
-     * `tiers` — plan_id → device allowance. The shipped tiers are 1/3/5; an
-     *   unknown plan falls back to `default_allowance`.
+     *
+     * Device tiers (the 1/3/5 seat allowances) now live on the plan itself
+     * (`device_plans.device_allowance`), set in the dashboard — see Decision 3 and
+     * DevicePlan::allowanceFor(). The keys below are only the default and a legacy
+     * override consulted when a plan row cannot be resolved.
      */
     'sync' => [
         'join_token_ttl_minutes' => (int) env('DEVICE_SYNC_JOIN_TTL_MINUTES', 15),
@@ -126,16 +129,12 @@ return [
          */
         'retention_days' => (int) env('DEVICE_SYNC_RETENTION_DAYS', 60),
         'default_allowance' => (int) env('DEVICE_SYNC_DEFAULT_ALLOWANCE', 1),
-        'tiers' => [
-            'solo' => 1,
-            'trio' => 3,
-            'team' => 5,
-        ],
         /*
-         * plan_id → device allowance, consulted at owner onboarding. An unmapped
-         * plan (every V1 plan today) falls back to `default_allowance`. This is the
-         * operator-facing knob for multi-device tiers until plan provisioning wires
-         * the tiers above in directly (a documented follow-up). Example:
+         * Legacy override, plan_id → device allowance. The plan's own
+         * `device_allowance` column is the source of truth now (set in the
+         * dashboard); this map is consulted only when a plan row cannot be resolved,
+         * and is kept so a value set before tiers moved onto the plan is never
+         * silently dropped. Prefer editing the plan. Example:
          *   'yearly' => 3,  // the annual plan includes up to 3 devices
          */
         'plan_allowance' => [
