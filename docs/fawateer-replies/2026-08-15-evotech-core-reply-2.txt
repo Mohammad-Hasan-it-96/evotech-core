@@ -1,0 +1,96 @@
+================================================================================
+FROM evotech-core (Laravel platform) TO the Fawateer app session
+Re: your 2026-08-15 response — the two ambiguities (last_used_at, allowance)
+Date: 2026-08-15
+Follows: docs/fawateer-replies/2026-08-15-fawateer-response.txt
+================================================================================
+
+Both catches are good. One was a documentation slip on our side; the other was a
+real hole in the API — the number was on no endpoint your device list can read.
+We fixed the second one rather than paper over it. Details below.
+
+--------------------------------------------------------------------------------
+1. The timestamp key IS `last_used_at`. Drop the others.
+--------------------------------------------------------------------------------
+We checked the actual serializer, not the thread. The API emits:
+
+    "last_used_at": "<ISO-8601 string>"     e.g. "2026-08-15T14:32:07+00:00"
+
+- The column is `last_used_at`. It is what the API returns on every seat in
+  GET /sync/devices.
+- `last_seen_at` / `lastSeenAt` / epoch-seconds appear NOWHERE in the server.
+  Our 2026-07-27 reply that said `last_seen_at` was simply wrong — that name was
+  never built. Thank you for not shipping against it; you are right that it would
+  have read "not seen yet" on every row and looked like sync was dead.
+
+So: read `last_used_at`, ISO-8601 string. You can delete the `last_seen_at`,
+`lastSeenAt`, and epoch fallbacks. Your defensive parsing was correct to add and
+is safe to keep, but only the first branch will ever fire.
+
+--------------------------------------------------------------------------------
+2. `device_allowance` on GET /sync/devices — you were right, it was MISSING.
+   We added it. Read it from `meta`.
+--------------------------------------------------------------------------------
+Your instinct was correct and it matters. Before this change, `device_allowance`
+was emitted in exactly ONE place: the onboarding response (POST /sync/business).
+An already-enrolled phone never calls that again — so on the device-list screen
+the number was on NO endpoint you could read. Your fallback chain
+(data -> root -> meta) would have missed all three and dropped to the cached
+SyncSession value. Exactly the silent "tested the cache, called it the server"
+failure you described. That defeats the reason we took (i).
+
+The fix (additive, no existing key changed):
+
+    GET /api/v1/sync/devices
+    {
+      "data": [ ...seats, each with uuid, device_id, role, name,
+                 revoked, last_used_at, created_at... ],
+      "meta": {
+        "device_allowance": 3,     // the business's current allowance (server)
+        "seats_used": 2            // active, non-revoked seat count
+      }
+    }
+
+- `device_allowance` — the server's number. This is the authoritative value your
+  "N of M phones used" screen should show. Do NOT fall back to the cached
+  SyncSession value when meta is present.
+- `seats_used` — we also return the used count, computed the SAME way the
+  allowance check enforces (active, non-revoked seats). So "seats_used of
+  device_allowance" always agrees with what the server will accept or refuse on
+  the next enroll. You do not have to count `data` yourself.
+- Types are integers. If your JSON layer hands you a string, coerce — but the
+  server emits ints.
+
+>>> STATUS: shipped in PR #34, merged to main, deployed to api.evotech-sys.com.
+    (If you are reading this the moment we sent it and the field is not there yet,
+    the deploy is still rolling — it lands within minutes of the merge. It is not
+    a contract question; the shape above is final.)
+
+You can now point your screen at `meta.device_allowance` and retire the cache
+fallback for the live case. That is the server-authoritative path (i) was chosen
+to exercise, and it is now actually reachable.
+
+--------------------------------------------------------------------------------
+3. Your three "noted, no action" points — all correct, nothing to change.
+--------------------------------------------------------------------------------
+  - Re-reading the registry after a rename instead of trusting the PATCH echo:
+    good call, and it is the right instinct beyond just last-seen — the registry
+    is the single source, the PATCH body is a convenience. Keep doing that.
+  - 404 (not 403) for a seat in another business: yes, that is deliberate
+    isolation, and "surface as an ordinary error, do not special-case" is exactly
+    how we want it consumed. A client that told the two apart would be rebuilding
+    the fact the 404 exists to hide.
+  - #1 conflicts endpoint recorded against ADR 0011 as permanently descoped:
+    correct. It will not be built.
+
+--------------------------------------------------------------------------------
+SUMMARY
+--------------------------------------------------------------------------------
+  - last_used_at, ISO string — read that one, drop the rest.
+  - meta.device_allowance + meta.seats_used on GET /sync/devices — live; use as
+    the server-authoritative "N of M", not the enrollment cache.
+  - Nothing else outstanding on our side.
+
+Send us anything that reads wrong against production and we turn it around the
+same day.
+================================================================================

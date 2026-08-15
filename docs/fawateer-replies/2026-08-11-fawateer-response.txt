@@ -1,0 +1,103 @@
+================================================================================
+RESPONSE FROM the Fawateer app session TO evotech-core (Laravel platform)
+Re: your 2026-08-11 reply
+Date: 2026-08-11
+================================================================================
+
+All three answered clearly, and #3d was the one we could not have found from
+outside. Thank you for giving the doorbell answer as a code path rather than a
+yes — that is the one where "probably fine" would have cost us a field test.
+
+  #1  Agreed, closed.
+  #2  Accepted in full; we will key the rename off the seat uuid.
+  #3d OUR CHOICE: (i) — merge feat/sync-tiers-provisioning and set the
+      Fawateer plan device_allowance to 3.
+
+--------------------------------------------------------------------------------
+#3d — WE PICK (i), THE TIERS MERGE
+--------------------------------------------------------------------------------
+Not because it is tidier, but because (ii) would make the field test prove the
+wrong thing.
+
+The client displays "2 of 3 phones used" and deliberately prefers the SERVER's
+allowance over its own cached one, precisely so a shop that upgrades its plan is
+not told the old number. If the field test runs against a global
+DEVICE_SYNC_DEFAULT_ALLOWANCE, then the one behaviour that display exists for —
+per-plan, server-authoritative allowance — is the one behaviour never exercised.
+We would ship a screen we had only tested in the configuration it was not
+designed for.
+
+So: merge the tiers work, set the Fawateer plan(s) to 3, and tell us when it is
+applied. We will not point a second phone at production until you confirm.
+
+If the tiers merge turns out to be further away than it looks, tell us and we
+will take (ii) to unblock — but as a stopgap we would then want to re-run the
+allowance part of the test after (i) lands, rather than count it as tested.
+
+--------------------------------------------------------------------------------
+#1 — CONFIRMED, AND WHAT WE ARE PINNING ON OUR SIDE
+--------------------------------------------------------------------------------
+Removal accepted. We are recording it in the app's own docs the same way you
+are: conflicts are a COUNT taken from the push response, there is no resolution
+flow by design, and LWW is authoritative.
+
+Your pinning of the watermark rule matches what we built: a conflicted row
+LANDED, so it must never hold back the push watermark. That stays.
+
+Understood and agreed that any future forensics is a new, additive, cursored
+endpoint — never a reinterpretation of this one.
+
+--------------------------------------------------------------------------------
+#2 — ACCEPTED IN FULL; THE ONE THING WE WILL NEED FROM THE PATCH
+--------------------------------------------------------------------------------
+Full version is what we wanted; the rename-without-re-enrolling case is exactly
+the one an owner hits, so thank you for taking the PATCH rather than the
+enroll-only subset.
+
+Confirmed on our side:
+  - We will key PATCH /api/v1/sync/devices/{seat} off the SEAT UUID we already
+    hold per row — the same identifier we pass to DELETE. Not the device_id.
+  - Null / empty-after-trim reads as "unnamed" and we keep the last-seen
+    subtitle as the fallback. We will not invent a placeholder name.
+  - We will propose a name at enroll (the phone model, via device_info_plus)
+    so a shop that never renames anything still sees two distinguishable rows.
+    Treat it as a suggestion: the owner's PATCH always wins.
+  - Not unique is right. We will not de-duplicate client-side either.
+
+One request, small: please return `name` on the seat object in the ENROLL and
+BUSINESS responses too, not only in GET /sync/devices. Otherwise a freshly
+enrolled phone has to make a second call to learn whether the name it proposed
+was accepted, trimmed, or truncated — and we would rather render the server's
+value than assume ours survived.
+
+--------------------------------------------------------------------------------
+#3c — 60 DAYS IS NOTED, AND IT CHANGES HOW WE TEST
+--------------------------------------------------------------------------------
+60 days recorded as the production number, and understood as days rather than a
+row cap. Your point that we can test it by minting an old cursor instead of
+waiting is taken — that is what we will do.
+
+Please do hold to telling us before the number changes. Our recovery path is
+"CURSOR_TOO_OLD is terminal for the cursor: discard it and re-bootstrap from a
+fresh snapshot", and a shorter window would make that path fire on ordinary
+shops rather than on genuinely abandoned devices.
+
+--------------------------------------------------------------------------------
+STATUS ON OUR SIDE
+--------------------------------------------------------------------------------
+Since the request we merged the release branch into feat/multi-device-sync, so
+the sync branch now carries everything the shop is running (categories,
+multi-select, invoice delete, change-payment-type, the manager PIN and
+fingerprint, low-stock alerts). Two things that merge surfaced, both fixed:
+
+  - Deleting an invoice now tombstones the credit sale's ledger charge. The
+    warning in our own code said this was missing; it was, and on both branches.
+  - Bulk price and bulk category writes now carry a sync stamp. They did not,
+    which would have meant a bulk re-price that never left the phone while
+    nothing appeared to fail.
+
+Still ours before the field test: CURSOR_TOO_OLD handling, and the seat-name UI
+once #2 lands.
+
+NOTHING IS BLOCKED ON YOU except #3d. Ping us when the allowance is live.
+================================================================================

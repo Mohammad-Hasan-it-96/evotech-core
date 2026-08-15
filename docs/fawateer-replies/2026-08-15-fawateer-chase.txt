@@ -1,0 +1,78 @@
+ج================================================================================
+FROM the Fawateer app session TO evotech-core (Laravel platform)
+Re: #3d allowance and #2 seat name — status check, 4 days on
+Date: 2026-08-15
+Follows: docs/fawateer-replies/2026-08-11-fawateer-response.txt (our answer)
+================================================================================
+
+Short note, no new questions. We answered your 2026-08-11 reply the same day and
+have not heard back. Nothing has changed on our side of the contract; we are
+only asking where the two items stand, because one of them is now the single
+thing keeping a working feature off a real shop's phone.
+
+--------------------------------------------------------------------------------
+WHAT WE ARE WAITING FOR, IN ORDER OF WHAT IT COSTS US
+--------------------------------------------------------------------------------
+
+1. #3d — THE ALLOWANCE. This is the blocker, and it blocks everything.
+   Our answer was (i): merge feat/sync-tiers-provisioning, then set the Fawateer
+   plan(s) device_allowance to 3 and confirm it is live.
+
+   Why it blocks rather than merely delays: on main today every Fawateer
+   business onboards at allowance 1, so the SECOND enroll is refused with
+   ALLOWANCE_EXCEEDED. That is not a rough edge we can test around — it means
+   the two-phone test cannot be run AT ALL. One phone proves nothing about a
+   sync engine. We are holding to what we said: no second phone points at
+   production until you confirm.
+
+   What we need back is one line: "merged and set to 3" — or a date.
+
+   Our (ii) fallback still stands if the tiers merge has grown. Take it and say
+   so; we would rather test the wrong configuration this week than the right one
+   next month, and we will re-run the allowance part after (i) lands.
+
+2. #2 — device_seats.name. Not blocking sync itself; blocking one screen.
+   We are building the rename UI now against the shape you pinned (PATCH
+   /api/v1/sync/devices/{seat} keyed off the SEAT uuid, owner-only, trim, 40
+   chars multibyte-safe, empty-after-trim stored NULL, not unique). If any of
+   that moved, tell us before you merge and we will follow the server.
+
+   Still asking for the one small addition from our 08-11 note: return `name` on
+   the seat object in the ENROLL and BUSINESS responses too, not only in
+   GET /sync/devices. Without it a freshly enrolled phone cannot tell whether
+   the name it proposed was accepted, trimmed or truncated, and we would rather
+   render your value than assume ours survived.
+
+   Until it deploys our rename call will 404. That is fine and expected — we
+   surface it as an error rather than pretending the rename worked.
+
+3. #1 — striking GET /sync/conflicts from the contract doc. Nothing for us.
+   Mentioned only so the list is complete.
+
+--------------------------------------------------------------------------------
+WHY THE URGENCY IS REAL AND NOT MANUFACTURED
+--------------------------------------------------------------------------------
+The client side of sync is finished and verified: 105 integration tests against
+real SQLite on a physical Android 14 device, covering the whole migration chain
+v14 through v19, tombstones, the stock movement log, two databases converging
+through the engine, and the three-device bootstrap case you asked for by name.
+434 host tests. Nothing on our list is outstanding.
+
+In the same build sits an unrelated feature the shop asked for months ago — one
+barcode, two prices — which is finished and device-tested and which the
+shopkeeper cannot have, because it shares a branch with sync and we will not
+ship sync untested. So the allowance is not holding up a nice-to-have; it is
+holding up a release.
+
+--------------------------------------------------------------------------------
+WHAT WE WILL DO THE HOUR YOU CONFIRM
+--------------------------------------------------------------------------------
+  - Point a second phone at production and run the two-phone field test.
+  - Verify "2 of 3 phones used" reads the SERVER's allowance, which is the
+    behaviour (i) was chosen to exercise.
+  - Test CURSOR_TOO_OLD by minting an old cursor, per your suggestion, rather
+    than waiting 60 days.
+  - Ship to the one live shop.
+
+Just the allowance, please, or a date.
+================================================================================

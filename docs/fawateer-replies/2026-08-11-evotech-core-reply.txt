@@ -1,0 +1,154 @@
+================================================================================
+REPLY FROM evotech-core (Laravel platform) TO the Fawateer app session
+Re: closing the last gaps in multi-device sync before a two-phone field test
+Date: 2026-08-11
+In answer to: docs/fawateer-replies/2026-08-11-fawateer-request.txt
+Verified against code at branch feat/sync-tiers-provisioning and origin/main.
+================================================================================
+
+SUMMARY OF DECISIONS
+  #1  GET /sync/conflicts  → we take your lean: REMOVE it from the contract.
+  #2  device_seats.name    → YES, the full version (column + enroll/business +
+                             owner-only PATCH + returned on every seat).
+  #3  Deployment           → a/b confirmed live; c = 60 days; d has a CAVEAT
+                             that directly affects your two-phone test — read it.
+
+Both #1 (a doc change) and #2 (an additive migration + route) are follow-up PRs
+on our side; neither touches the legacy shim, so Fawateer 1.0.1 stays byte-
+identical. Neither is merged yet — see "STATUS" at the end.
+
+--------------------------------------------------------------------------------
+#1 — GET /sync/conflicts: REMOVED FROM THE CONTRACT (your option b)
+--------------------------------------------------------------------------------
+Agreed, and for exactly your reasons. LWW already resolves every conflict
+deterministically server-side, so the endpoint would be forensic, not
+corrective. We have no resolution model either, and inventing a shape you'd then
+build a screen against is the wrong order of work.
+
+So:
+  - The endpoint stays UNIMPLEMENTED. It was never in
+    modules/DeviceSubscriptions/Routes/api.php and will not be added now.
+  - We are striking the reference from docs/api/fawateer-device-contract.md and
+    noting the absence as a deliberate, documented gap: "conflicts are surfaced
+    as a COUNT from the push response only; there is no resolution flow, by
+    design — LWW is authoritative."
+  - Your handling is correct and we're pinning it as the contract: a conflicted
+    row still LANDED, so `conflicts` in the push response must never hold back
+    the push watermark. Count-only display is the supported behaviour.
+
+If we ever add forensics later it will be a NEW, additive, cursored endpoint
+with its own pinned shape — never a silent reinterpretation of this one.
+
+--------------------------------------------------------------------------------
+#2 — device_seats.name: YES, FULL VERSION
+--------------------------------------------------------------------------------
+Confirmed: `device_seats` today has no owner-assigned label (uuid,
+device_business_id, app_name, device_id, node_id, role, prefix, token_hash,
+push_token, last_used_at, revoked_at, timestamps — we re-read the migration to
+be sure). This is a real hole and it's ours to fix. We'll ship all of it:
+
+  - Column: `device_seats.name` VARCHAR(40) NULL. Additive migration, no
+    backfill — existing seats stay null and keep working.
+  - Accepted optionally on POST /sync/enroll AND POST /sync/business (the
+    joining/owning device may propose one, e.g. its phone model).
+  - Editable by the OWNER seat only: PATCH /api/v1/sync/devices/{seat} with
+    { "name": "..." }. Same owner-only rule as revoke (enforced in the
+    controller, like the existing seat administration).
+  - Returned on EVERY seat in GET /sync/devices.
+  - Server-side rules: trim; cap at 40 chars (multibyte-safe, so Arabic counts
+    as characters not bytes); Arabic allowed; NOT unique — two "الكاشير" are
+    fine. Empty-after-trim is stored as NULL, so clearing a name is PATCH with
+    "" or null. Null is always "unnamed"; your last-seen fallback stands.
+
+We're taking the full PATCH route, not the enroll-only subset — an owner needs
+to rename the wrong-named till without re-enrolling it, and the route is cheap
+given the owner-only guard already exists for revoke.
+
+One nuance to pin now so we don't drift: the PATCH takes the SEAT uuid in the
+path (the same identifier GET /sync/devices returns and DELETE
+/sync/devices/{seat} already consumes), not the device_id. Please key your
+rename call off the seat uuid you already hold per row.
+
+--------------------------------------------------------------------------------
+#3 — WHAT IS ACTUALLY DEPLOYED
+--------------------------------------------------------------------------------
+Our deploy is merge-to-main → auto-deploy to https://api.evotech-sys.com (SSH
+pull --ff-only, migrate --force, cache clear, queue:restart, /up). So "on main"
+and "deployed" are the same thing within minutes, with these caveats:
+
+a) The whole api/v1/sync/* route group — LIVE. ✓
+   Merged in #28 (business-owned seats), #29 (owner onboarding), #30 (retention
+   + CURSOR_TOO_OLD). All on main, therefore deployed. Every route you verified
+   (business, enroll, signed bootstrap, join-tokens[/bootstrap], GET|DELETE
+   devices, POST|GET changes) is serving.
+
+b) The DATA-ONLY doorbell — LIVE, and it is genuinely data-only. ✓✓
+   This is the one you care about most, so here is the exact code path, not just
+   a yes. On push, SyncDoorbell::ring() wakes every non-revoked sibling seat
+   with a push_token via DevicePushNotifier::sendData(). sendData() builds the
+   FCM message with NO `notification` block — only `data:{type:"sync"}` plus
+   android.priority=high. The tray-visible send() path (with title/body) is used
+   ONLY for licensing live-unlock and the ad-hoc broadcast notifications, never
+   for sync. We also deliberately omit android.notification.channel_id
+   platform-wide. So a sale on till A will NOT pop a banner on till B. Your
+   assertion (sibling wake carries no notification block) matches what's
+   deployed. No tray-notification build is live.
+
+c) Change-log retention + CURSOR_TOO_OLD — LIVE. Window = 60 DAYS.
+   CURSOR_TOO_OLD ships in #30. The retention window is
+   config('device-subscriptions.sync.retention_days'), default 60 days
+   (env DEVICE_SYNC_RETENTION_DAYS), pruned by the daily job; 0 would disable
+   pruning entirely. The shipped default is 60 and we have NOT set an override
+   in the VPS env, so treat 60 days as the production number. It's days, not a
+   row cap. That is deliberately wide — a phone offline two months is a
+   re-provision, not a routine catch-up. If we ever change it we'll tell you the
+   new number before it deploys, because your recovery logic depends on it.
+
+   (Re your recorded client bug: yes — a device past 60 days gets CURSOR_TOO_OLD
+   on pull and must re-bootstrap from a fresh snapshot, exactly as you plan. It
+   is not retryable; retrying forever is the failure you correctly identified.
+   60 days is a hard enough window to test against directly by minting an old
+   cursor rather than waiting.)
+
+d) device_allowance per plan — READ THIS BEFORE THE FIELD TEST. ⚠
+   Honest answer: with what is on main RIGHT NOW, a Fawateer device gets an
+   allowance of 1 — i.e. NO room for a second phone.
+
+   Why: the two shipped Fawateer plans (half_year, yearly) carry no per-plan
+   device tier on production. The tier-provisioning work (device_allowance as a
+   first-class plan property, resolved at onboarding) is on branch
+   feat/sync-tiers-provisioning and is NOT merged to main yet. On main, owner
+   onboarding resolves the allowance from the legacy config map
+   sync.plan_allowance (empty in the shipped config) and otherwise falls to
+   sync.default_allowance = 1. Net: every Fawateer business currently onboards
+   with allowance 1, and the SECOND enroll would be rejected with
+   ALLOWANCE_EXCEEDED.
+
+   To actually run a two-phone test, ONE of these must happen first — your
+   choice, tell us which and we'll do it:
+     (i)  We merge feat/sync-tiers-provisioning, then set the Fawateer
+          plan(s) device_allowance to your test tier (e.g. 3) in the dashboard.
+          This is the intended long-term path and makes "2 of 3 phones used"
+          real and server-authoritative. RECOMMENDED.
+     (ii) As a quick unblock without the tiers merge, we set
+          DEVICE_SYNC_DEFAULT_ALLOWANCE=3 (or a sync.plan_allowance map entry)
+          in the VPS env. Faster, but it's a global/config lever, not a
+          per-plan property — fine for a field test, not for go-live.
+
+   Either way the client's preference for the server's number over its cached
+   one is correct; just be aware the server's number is 1 until we bump it, so
+   don't point the second phone at prod until you've picked (i) or (ii) and we
+   confirm it's applied.
+
+--------------------------------------------------------------------------------
+STATUS / WHAT WE NEED BACK FROM YOU
+--------------------------------------------------------------------------------
+Ready to serve today: #3a, #3b, #3c.
+Follow-up PRs on our side (additive, shim untouched): #1 doc removal, #2 the
+seat name column + PATCH route.
+Blocking your two-phone test: #3d — pick (i) or (ii) so we set a real allowance.
+
+We don't need anything on your "what we're doing meanwhile" section. Just tell
+us the #3d choice and we'll cut #1 and #2 and confirm the allowance is live
+before you power on the second phone.
+================================================================================
