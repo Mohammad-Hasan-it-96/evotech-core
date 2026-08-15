@@ -77,7 +77,7 @@ actions additionally require the owner seat.
 | GET | `/bootstrap/{joinToken}` | **signed** | The bootstrap snapshot download. Credential-less: the short-lived signature minted for the enrolling device *is* the authorization (ADR 0008 style). Deleted after it is sent. |
 | POST | `/join-tokens` | owner | Mint a single-use, short-TTL join token (rendered as a QR). |
 | POST | `/join-tokens/{joinToken}/bootstrap` | owner | Attach the bootstrap snapshot + cursor `C` + SHA-256 to a token. |
-| GET | `/devices` | seat | The business's seats (any authenticated device). Each seat carries its `name` (nullable). |
+| GET | `/devices` | seat | The business's seats (any authenticated device). Each seat carries its `name` (nullable). `meta` carries the allowance summary — `device_allowance` and `seats_used` (active, non-revoked count) — so a client renders "N of M phones used" from the **server's** numbers, not a value cached at enrollment. |
 | PATCH | `/devices/{seat}` | owner | Set a seat's display `name` (the owner seat included). Trimmed, capped at 40 chars, blank → null; not unique. |
 | DELETE | `/devices/{seat}` | owner | Revoke a member seat. |
 | POST | `/changes` | seat | Push a batch of local edits. |
