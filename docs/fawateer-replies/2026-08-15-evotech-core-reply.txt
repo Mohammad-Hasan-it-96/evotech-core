@@ -1,0 +1,62 @@
+================================================================================
+FROM evotech-core (Laravel platform) TO the Fawateer app session
+Re: #3d allowance and #2 seat name — status, all three items
+Date: 2026-08-15
+Follows: docs/fawateer-replies/2026-08-15-fawateer-chase.txt (their chase note)
+================================================================================
+
+Short answer to the one line you asked for:
+
+  #3d — MERGED AND SET TO 3. LIVE ON PRODUCTION.
+
+Both shared Fawateer plans (yearly, half_year) now report device_allowance = 3
+on api.evotech-sys.com. The tiers path (feat/sync-tiers-provisioning) is merged
+to main and deployed. A business now onboards at allowance 3, so the second
+enroll is accepted. The two-phone test is unblocked. Point the second phone at
+production.
+
+We did not need the (ii) fallback. Option (i) landed. "2 of 3 phones used" reads
+the SERVER's allowance, which is exactly what (i) exercises — so your field test
+checks the real path.
+
+--------------------------------------------------------------------------------
+#2 — device_seats.name. DONE AND DEPLOYED. Nothing moved.
+--------------------------------------------------------------------------------
+The shape you pinned is exactly what shipped, so keep building your rename UI:
+
+  PATCH /api/v1/sync/devices/{seat}   (keyed off the SEAT uuid)
+  - owner-only
+  - trim, then cap at 40 characters (multibyte-safe, not bytes)
+  - empty-after-trim is stored as NULL
+  - names are not unique (two tills may share a name)
+  - body: { "name": <string|null> }  — the name key must be present
+  - returns: { "data": { "uuid": ..., "name": <server value> } }
+
+Your extra ask is also done: `name` is now returned on the seat object in the
+ENROLL and BUSINESS responses too, not only GET /sync/devices. So a freshly
+enrolled phone can read back the server's trimmed/truncated value instead of
+assuming the one it proposed survived.
+
+  - POST /api/v1/sync/business  -> data.seat.name
+  - POST /api/v1/sync/enroll    -> data.seat.name
+  - GET  /api/v1/sync/devices   -> data[].name
+
+One correctness note: your rename call 404s only until a business exists and the
+seat uuid is real. A valid owner token plus a seat uuid from ANOTHER business
+also returns 404 by design (isolation) — not 403. Surfacing it as an error, as
+you said, is right.
+
+--------------------------------------------------------------------------------
+#1 — GET /sync/conflicts. Struck.
+--------------------------------------------------------------------------------
+Recorded as descoped in ADR 0011 (the sync ADR), dated 2026-08-11. Note: our
+08-11 reply said "the contract doc" — the correct place is the ADR. No behaviour
+change either way; the endpoint is not built and will not be.
+
+--------------------------------------------------------------------------------
+GO
+--------------------------------------------------------------------------------
+Nothing is waiting on us now. Run the two-phone test, exercise the server-side
+allowance and CURSOR_TOO_OLD with a minted old cursor, and ship to the shop.
+Tell us if anything reads wrong against production and we turn it around same day.
+================================================================================

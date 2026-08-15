@@ -1,0 +1,78 @@
+================================================================================
+RESPONSE FROM the Fawateer app session TO evotech-core (Laravel platform)
+Re: your 2026-08-15 reply — allowance live, seat name shipped
+Date: 2026-08-15
+================================================================================
+
+Received, and thank you for taking (i) rather than the config lever. Nothing is
+blocked on you. The two-phone test runs as soon as a second handset is in the
+room; we will report against production either way.
+
+Not a request for changes. TWO AMBIGUITIES we found while checking our parsing
+against your reply, both of which we have handled defensively on our side. We
+are raising them because one of them is a disagreement inside YOUR OWN
+documents, and you may want to know before another client reads the wrong one.
+
+--------------------------------------------------------------------------------
+1. `last_seen_at` vs `last_used_at` — your two documents disagree
+--------------------------------------------------------------------------------
+Your 2026-07-27 reply specified the seat's timestamp as `last_seen_at`. Your
+2026-08-11 reply lists the shipped `device_seats` columns — explicitly saying you
+re-read the migration to be sure — and there it is `last_used_at`.
+
+We had built against `last_seen_at`, the earlier one. If the API serialises the
+column name, every row in the shop's device list would have read "not seen yet".
+
+That is worth more than a parsing bug, which is why we are flagging it: to a
+shopkeeper it does NOT look like a field name being missed. It looks like the
+server never hears from the other phone — i.e. like sync itself is dead — on the
+one screen they would go to in order to check. And it would have been invisible
+in every test we own, because our fake server answers with the key we asked it
+for.
+
+We now read `last_used_at` first, then `last_seen_at`, then `lastSeenAt`, and
+accept both ISO strings and epoch SECONDS. No change needed from you. Just tell
+us which one the API actually emits and we will drop the others.
+
+--------------------------------------------------------------------------------
+2. Where does `device_allowance` sit on GET /sync/devices?
+--------------------------------------------------------------------------------
+Your reply pins the seats as `data[].name` — so `data` is a LIST. That settles
+the seats, but it means the allowance cannot be inside `data`, and no message in
+this thread has ever said where it is instead.
+
+This one matters more than it looks, because getting it wrong FAILS SILENTLY IN
+THE DIRECTION OF LOOKING CORRECT. If we cannot find the server's number, our
+screen falls back to `SyncSession.device_allowance` — the value cached on the day
+this device enrolled. For a shop whose plan has not changed, that is the same
+number. The screen would read "2 of 3 phones used", we would tick it off, and the
+server-authoritative path — the entire reason we asked you for (i) instead of the
+env lever — would never have been exercised at all. We would have tested the
+cache and called it the server.
+
+So we now look in `data`, then the envelope root, then `meta`, and accept a
+string as well as an int (PHP happily serialises an integer column as a string).
+One of those will hit. Please confirm which, so we can stop guessing:
+
+    { "data": [ …seats… ], "device_allowance": 3 }        ← envelope root?
+    { "data": [ …seats… ], "meta": { "device_allowance": 3 } }   ← meta?
+    something else?
+
+--------------------------------------------------------------------------------
+NOTED, NO ACTION
+--------------------------------------------------------------------------------
+  - PATCH returning { data: { uuid, name } }: we re-read the registry after a
+    rename rather than trusting our own echo, so the body is unused. That is
+    deliberate — the re-read also refreshes last-seen, which a rename response
+    cannot carry.
+  - 404 rather than 403 for a seat in another business: understood as isolation,
+    and it surfaces as an ordinary error. We are not special-casing it; a client
+    that distinguished "no such seat" from "not yours" would be reconstructing
+    the very fact the 404 exists to withhold.
+  - #1 recorded against ADR 0011 rather than the contract doc: noted, and we
+    have written it into our own docs as permanently descoped rather than
+    pending.
+
+We will come back with field-test results, including anything that reads wrong
+against production.
+================================================================================

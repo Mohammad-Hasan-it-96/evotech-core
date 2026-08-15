@@ -170,10 +170,18 @@ final class SyncEnrollmentController extends SyncController
         });
     }
 
-    /** GET /api/v1/sync/devices — the business's seats (any authenticated device). */
+    /**
+     * GET /api/v1/sync/devices — the business's seats (any authenticated device).
+     *
+     * `data` is the seat list; the allowance summary sits in `meta` so a client can
+     * render "N of M phones used" from the SERVER's numbers, not a value cached at
+     * enrollment. `seats_used` is the active (non-revoked) seat count — the same
+     * figure the allowance check enforces against — so the two numbers always agree.
+     */
     public function devices(): JsonResponse
     {
-        $seats = $this->enrollment->seatsFor($this->business());
+        $business = $this->business();
+        $seats = $this->enrollment->seatsFor($business);
 
         return ApiResponse::success(
             $seats->map(fn (DeviceSeat $seat): array => [
@@ -185,6 +193,10 @@ final class SyncEnrollmentController extends SyncController
                 'last_used_at' => $seat->last_used_at?->toIso8601String(),
                 'created_at' => $seat->created_at?->toIso8601String(),
             ])->all(),
+            meta: [
+                'device_allowance' => $business->device_allowance,
+                'seats_used' => $business->activeSeatCount(),
+            ],
         );
     }
 

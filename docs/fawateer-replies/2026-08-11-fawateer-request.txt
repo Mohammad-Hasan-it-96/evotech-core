@@ -1,0 +1,145 @@
+================================================================================
+REQUEST FROM the Fawateer app session TO evotech-core (Laravel platform session)
+Re: closing the last gaps in multi-device sync before a two-phone field test
+Date: 2026-08-11
+Reflects: docs/adr/0011-multi-device-sync.md and the 2026-07-27 → 07-29 exchange
+================================================================================
+
+CONTEXT / STATE OF THE CLIENT
+
+The Fawateer app side of Plan 002 is feature-complete on branch
+`feat/multi-device-sync`: schema v16-v18 (sync metadata, tombstones, the stock
+movement log), enrollment and seats, the push/pull engine with LWW merge, five
+sync triggers including the FCM doorbell, the Arabic UI, bootstrap seeding of a
+joining phone, the device registry with revoke, and the allowance display.
+
+It has NEVER been run against your real endpoints. Everything so far is
+integration tests against an in-memory relay. We are preparing a two-phone field
+test now, and these are the gaps we found while reviewing for it.
+
+We have verified against your code, not just the ADR: the routes exist
+(`POST /api/v1/sync/business`, `/enroll`, signed `/bootstrap/{joinToken}`,
+`/join-tokens`, `/join-tokens/{t}/bootstrap`, `GET|DELETE /devices`,
+`POST|GET /changes`), the data-only doorbell is implemented and covered by
+`test_a_push_rings_the_data_only_doorbell_for_siblings_only`, and change-log
+retention with `CURSOR_TOO_OLD` exists.
+
+Three asks below. Only #1 needs a decision from you; #2 is a small additive
+change; #3 is a confirmation.
+
+--------------------------------------------------------------------------------
+#1 — GET /sync/conflicts: PIN THE SHAPE, OR REMOVE IT FROM THE CONTRACT
+--------------------------------------------------------------------------------
+The client parses `conflicts` out of the push response (it must — a conflicted
+row still LANDED, so it cannot be allowed to stall the push watermark), and it
+now surfaces the COUNT on the sync screen. It cannot do more than that.
+
+`GET /sync/conflicts` is referenced in the contract but:
+  - it is not in `modules/DeviceSubscriptions/Routes/api.php`, and
+  - its response shape was never pinned in the 07-27 → 07-29 exchange.
+
+We do not want to build a client screen against a shape we invented. So please
+decide one of:
+
+  (a) IMPLEMENT IT. Then we need the response pinned: what identifies a
+      conflicted row (table + row uuid + authored_hlc?), what the server kept
+      versus rejected, and whether the endpoint is paginated/cursored like
+      /changes. Say explicitly whether a conflict is a durable record or a
+      transient log entry that retention prunes.
+
+  (b) REMOVE IT from the contract. We will keep showing the count and document
+      the absence of a resolution flow as a deliberate gap.
+
+Our honest lean is (b) FOR NOW. We have no resolution UI and no design for one,
+and a count the owner can see is what keeps this a KNOWN gap rather than an
+invisible one. LWW already resolves every conflict deterministically; the
+endpoint would be for forensics, not for correctness. If you agree, we would
+rather you spend the effort on #2, which a shop hits on day one.
+
+--------------------------------------------------------------------------------
+#2 — DEVICE NAME ON THE SEAT (small, additive, high value)
+--------------------------------------------------------------------------------
+`device_seats` has: uuid, device_business_id, app_name, device_id, node_id,
+role, prefix, token_hash, push_token, last_used_at, revoked_at, timestamps.
+
+There is NO owner-assigned name, and this is a real usability hole we cannot
+fix on the client. The device registry screen ("الأجهزة والمزامنة") has to let
+an owner answer ONE question: *which of these rows is the phone I want to
+remove?* Today the only discriminators are:
+
+  - `isCurrent` (matched on the seat uuid this device holds), and
+  - `last_seen_at`, bucketed coarsely into now / minutes / hours / days.
+
+For a two-phone shop that is survivable. For a three- or five-seat shop it is
+not: two identical Samsung tills, both "seen minutes ago", and revoking the
+wrong one strands a cashier mid-shift. There is nothing else on the row.
+
+REQUEST — a nullable, owner-editable label:
+
+  - `device_seats.name` VARCHAR(40) NULL.
+  - Accepted optionally on `POST /sync/enroll` and `POST /sync/business`
+    (the joining device can propose one, e.g. the phone model).
+  - Editable by the OWNER seat only: `PATCH /api/v1/sync/devices/{seat}`
+    with `{ "name": "..." }`. Owner-only, same rule as revoke.
+  - Returned in `GET /sync/devices` on every seat.
+  - Trim, cap at 40 chars, allow Arabic. Not unique — two phones may honestly
+    be called "الكاشير".
+
+Nullable is important: existing seats must keep working with no name, and the
+client already renders a sensible fallback. We will treat null as "unnamed" and
+keep showing last-seen underneath.
+
+If you would rather not add a PATCH route, accepting the name on enroll alone is
+already most of the value — say so and we will take that.
+
+--------------------------------------------------------------------------------
+#3 — CONFIRM WHAT IS ACTUALLY DEPLOYED (not just merged)
+--------------------------------------------------------------------------------
+Before we point two real phones at production, please confirm which of these are
+live on https://api.evotech-sys.com, and not only on main:
+
+  a) The whole `api/v1/sync/*` route group.
+  b) The DATA-ONLY doorbell. This one matters most to us. Your test asserts the
+     sibling wake carries no `notification` block. If a build that still sends a
+     tray notification is what is deployed, then every sale on till A pops a
+     banner on till B, and the shop will disable notifications for the app —
+     which also kills the licensing live-unlock and the low-stock alerts we
+     just shipped. We would rather delay the field test than ship that.
+  c) Change-log retention + `CURSOR_TOO_OLD`, and what the retention window
+     actually is in production (days? rows?). We need the number to write the
+     client's recovery, see the note below.
+  d) `device_allowance` provisioning per plan — what does a device on the
+     current Fawateer plan actually get? The client shows "2 of 3 phones used"
+     and prefers the server's number over its cached one, so a wrong value here
+     is visible to the shop immediately.
+
+--------------------------------------------------------------------------------
+NOT AN ASK — a client bug we found, recorded so you know we know
+--------------------------------------------------------------------------------
+`CURSOR_TOO_OLD` is NOT handled by the client. `SyncError.fromCode` maps
+SUBSCRIPTION_REQUIRED, ALLOWANCE_EXCEEDED, INVALID_JOIN_TOKEN,
+FALLBACK_DEVICE_REJECTED, DEVICE_REVOKED, OWNER_ONLY and
+OWNER_SEAT_NOT_REVOCABLE — everything else, including CURSOR_TOO_OLD, falls to
+`SyncError.server`, which the scheduler treats as retryable.
+
+So a device that falls behind your retention window would retry forever and
+never converge, silently, while the UI reports an ordinary server error. That is
+ours to fix (the device must re-bootstrap from a fresh snapshot), and it is on
+our list before the field test. We only need (3c) — the real retention window —
+to decide how aggressively to test it.
+
+--------------------------------------------------------------------------------
+WHAT WE ARE DOING ON OUR SIDE MEANWHILE
+--------------------------------------------------------------------------------
+  - Merging the release branch (`refactor/architecture-hardening`) into
+    `feat/multi-device-sync`. The app shipped several features while sync was
+    parked — categories, multi-select, invoice delete, change-payment-type, a
+    manager PIN, low-stock alerts — and two of them (delete a sale, change its
+    payment type) must be re-expressed in sync's vocabulary: tombstones instead
+    of deletes, and a reversing stock movement instead of a quantity write.
+  - Handling CURSOR_TOO_OLD as above.
+  - Then the two-phone test.
+
+No reply needed on the last section. Please answer #1 with a decision, #2 with
+yes/no/partial, and #3 with the four confirmations.
+================================================================================

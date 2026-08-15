@@ -8370,6 +8370,7 @@
         "/v1/sync/devices": {
             "get": {
                 "operationId": "v1.sync.devices.index",
+                "description": "`data` is the seat list; the allowance summary sits in `meta` so a client can\nrender \"N of M phones used\" from the SERVER's numbers, not a value cached at\nenrollment. `seats_used` is the active (non-revoked) seat count \u2014 the same\nfigure the allowance check enforces against \u2014 so the two numbers always agree.",
                 "summary": "GET /api/v1/sync/devices \u2014 the business's seats (any authenticated device)",
                 "tags": [
                     "SyncEnrollment"
@@ -8424,7 +8425,20 @@
                                             }
                                         },
                                         "meta": {
-                                            "type": "string"
+                                            "type": "object",
+                                            "properties": {
+                                                "device_allowance": {
+                                                    "type": "integer"
+                                                },
+                                                "seats_used": {
+                                                    "type": "integer",
+                                                    "minimum": 0
+                                                }
+                                            },
+                                            "required": [
+                                                "device_allowance",
+                                                "seats_used"
+                                            ]
                                         },
                                         "links": {
                                             "type": "string"
