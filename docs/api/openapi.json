@@ -8249,6 +8249,7 @@
         "/v1/sync/join-tokens/{joinToken}/bootstrap": {
             "post": {
                 "operationId": "v1.sync.join-tokens.bootstrap",
+                "description": "`{joinToken}` is the RAW join-token string the mint returned \u2014 the same value\nthe joiner later sends to POST /sync/enroll \u2014 looked up by hash, never a record\nuuid (the uuid is never handed out). A token that is unknown or belongs to\nanother business resolves to nothing and 404s, the feature's isolation rule.",
                 "summary": "POST /api/v1/sync/join-tokens/{joinToken}/bootstrap \u2014 owner uploads the\nbootstrap snapshot and its cursor `C` (Decision 13). The cursor is the\nowner's OWN local pull cursor; the SHA-256 is owner-computed and stored as-is\nso the joiner's integrity check is end-to-end owner\u2192joiner (H2)",
                 "tags": [
                     "SyncEnrollment"
@@ -8258,7 +8259,6 @@
                         "name": "joinToken",
                         "in": "path",
                         "required": true,
-                        "description": "The join token UUID",
                         "schema": {
                             "type": "string"
                         }

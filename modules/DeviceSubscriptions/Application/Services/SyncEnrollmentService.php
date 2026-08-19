@@ -243,6 +243,23 @@ final class SyncEnrollmentService
     }
 
     /**
+     * Resolve a join token from its RAW plaintext, scoped to one business — the
+     * lookup behind the bootstrap upload. The plaintext is never stored, so the
+     * match is by hash; scoping to the business makes a token minted by another
+     * shop invisible (returns null → the controller 404s, the isolation rule). This
+     * is the same identifier the joiner presents to {@see enroll()}, so the owner
+     * uploads against the exact string the mint handed back — no record uuid is ever
+     * exposed for a client to build a URL from.
+     */
+    public function resolveOwnedJoinToken(string $plaintext, DeviceBusiness $business): ?DeviceJoinToken
+    {
+        return DeviceJoinToken::query()
+            ->where('device_business_id', $business->id)
+            ->where('token_hash', $this->tokens->hash($plaintext))
+            ->first();
+    }
+
+    /**
      * Record the bootstrap handoff an owner uploaded against a join token
      * (Decision 13): the pull cursor `C` (the owner's OWN local cursor, read
      * before its VACUUM), the transient snapshot path, and the owner-computed
