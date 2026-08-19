@@ -1,0 +1,114 @@
+================================================================================
+REPORT FROM the Fawateer app session TO evotech-core (Laravel platform)
+Re: POST /api/v1/sync/join-tokens/{token}/bootstrap returns 404 for every input
+Date: 2026-08-16
+Verified against: https://api.evotech-sys.com (production), with a real owner
+                  seat token and a freshly minted join token
+================================================================================
+
+FIRST, WHAT WE GOT WRONG, SO YOU CAN DISCOUNT IT
+
+We ran the client against your real endpoints for the first time today. It had
+never happened before — every test we own drives an in-memory relay, which has
+no URL, so four wrong paths had survived from the 2026-07-27 design document:
+
+    we called                what you serve
+    POST /sync/push          POST /sync/changes
+    GET  /sync/pull          GET  /sync/changes
+    POST /sync/enroll/token  POST /sync/join-tokens
+    POST /sync/enroll/seed   POST /sync/join-tokens/{t}/bootstrap
+
+Your 2026-08-11 reply names all four correctly in one line; we simply never
+changed the client. Our fault, now fixed and pinned by a test that asserts the
+literal URLs.
+
+We also had the pull envelope wrong. We read `{changes, next_cursor, has_more}`
+at the top level; you return
+
+    {"data":[…rows…],"meta":{"next_cursor":0,"has_more":false}}
+
+That one is worth flagging to whoever writes the next client, because it fails
+at HTTP 200: reading the documented shape against the real body yields an empty
+page every time, so the device reports "up to date" while the other phone's
+sales sit unread. A wrong URL at least errors. Fixed and pinned too.
+
+WHAT NOW WORKS, END TO END, ON A REAL PHONE
+
+  POST /sync/business          ✓ (was already working)
+  POST /sync/enroll            ✓
+  GET  /sync/devices           ✓  data[] + meta{device_allowance, seats_used}
+  PATCH/DELETE /sync/devices/{seat} ✓
+  POST /sync/changes           ✓  our row landed; server seq advanced 0 → 1
+  GET  /sync/changes           ✓  correct envelope, own rows filtered out
+  POST /sync/join-tokens       ✓  201, {data:{join_token, expires_at, business_uuid}}
+
+--------------------------------------------------------------------------------
+THE ONE THING BLOCKING US: THE BOOTSTRAP UPLOAD
+--------------------------------------------------------------------------------
+
+    POST /api/v1/sync/join-tokens/{token}/bootstrap
+    -> 404 {"error":{"code":"NOT_FOUND","message":"Resource not found."}}
+
+The route EXISTS — `PUT` on the same path answers "The PUT method is not
+supported for route api/v1/sync/join-tokens/{t}/bootstrap. Supported methods:
+POST." So it is registered; it is the request that resolves to nothing.
+
+It returns the identical 404 for all three of these, which is why we think this
+is not us holding it wrong:
+
+    - a join token minted seconds earlier by POST /sync/join-tokens
+    - the business_uuid from that same mint response
+    - a string that was never a token at all ("zzzz-not-a-real-token")
+
+Request used (owner seat token as Bearer, multipart):
+
+    curl -X POST \
+      -H "Authorization: Bearer <owner seat token>" \
+      -F "snapshot=@shop.sqlite" \
+      -F "join_token=<the minted token>" \
+      -F "cursor=1" \
+      -F "sha256=<hex>" \
+      https://api.evotech-sys.com/api/v1/sync/join-tokens/<the minted token>/bootstrap
+
+If the field names were wrong we would expect 422 with VALIDATION_FAILED, the
+way POST /sync/changes correctly answered "The changes field is required." when
+we sent an empty batch. A 404 that ignores the token entirely reads to us like
+route-model binding on a column the mint does not populate, or a controller that
+is still a skeleton.
+
+GET /api/v1/sync/bootstrap/{token} also 404s for the same fresh token. That one
+may well be correct — there is no snapshot yet — so we are not reporting it as a
+fault, only noting we could not use it to tell the two cases apart.
+
+PLEASE CONFIRM
+
+  1. Is POST /sync/join-tokens/{t}/bootstrap implemented, or a registered
+     skeleton? A plain "not built yet" is a perfectly good answer and is the one
+     we can plan around.
+
+  2. What does {token} bind on — the raw `join_token` string we receive from the
+     mint, or something else (a token record uuid, a hash)? If it is anything
+     other than the raw string, the mint response does not currently return it,
+     so no client can construct this URL.
+
+  3. The multipart field names: is the file `snapshot`? Are `cursor` and
+     `sha256` the right names, and do you want `join_token` in the body as well
+     as the path?
+
+  4. Should the upload happen BEFORE the owner shows the QR (our order, per
+     ADR 0011 Decision 13 — the joiner verifies a hash that does not exist until
+     the snapshot does), or after the joiner redeems? Our whole ordering assumes
+     before.
+
+WHY THIS ONE MATTERS MORE THAN IT LOOKS
+
+Without it, a second phone joins and finds an EMPTY SHOP. Rows stamped
+`updated_at = ''` are deliberately never pushed — for an existing shop that is
+everything — so the change log carries what happened since sync began and the
+snapshot carries the shop itself. The owner's phone looks perfectly healthy
+throughout, so the shopkeeper concludes the new phone is broken. That is the
+failure the snapshot exists to prevent, and it is the last step between us and a
+two-phone field test.
+
+Everything else on our side is ready and verified against production.
+================================================================================

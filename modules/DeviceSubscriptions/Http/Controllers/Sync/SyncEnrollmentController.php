@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Config;
 use Modules\Core\Http\Responses\ApiResponse;
 use Modules\DeviceSubscriptions\Application\Services\SyncEnrollmentService;
 use Modules\DeviceSubscriptions\Domain\Contracts\SyncContext;
-use Modules\DeviceSubscriptions\Domain\Models\DeviceJoinToken;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSeat;
 
 /**
@@ -97,11 +96,19 @@ final class SyncEnrollmentController extends SyncController
      * bootstrap snapshot and its cursor `C` (Decision 13). The cursor is the
      * owner's OWN local pull cursor; the SHA-256 is owner-computed and stored as-is
      * so the joiner's integrity check is end-to-end owner→joiner (H2).
+     *
+     * `{joinToken}` is the RAW join-token string the mint returned — the same value
+     * the joiner later sends to POST /sync/enroll — looked up by hash, never a record
+     * uuid (the uuid is never handed out). A token that is unknown or belongs to
+     * another business resolves to nothing and 404s, the feature's isolation rule.
      */
-    public function attachBootstrap(Request $request, DeviceJoinToken $joinToken): JsonResponse
+    public function attachBootstrap(Request $request, string $joinToken): JsonResponse
     {
         $this->requireOwner();
-        $this->assertOwnedByBusiness($joinToken->device_business_id);
+
+        $token = $this->enrollment->resolveOwnedJoinToken($joinToken, $this->business());
+
+        abort_if($token === null, 404);
 
         $maxKb = Config::integer('device-subscriptions.sync.snapshot_max_kb');
 
@@ -124,10 +131,10 @@ final class SyncEnrollmentController extends SyncController
         }
 
         $cursor = $request->integer('cursor');
-        $this->enrollment->attachBootstrap($joinToken, $cursor, $path, (string) $request->string('snapshot_sha256'));
+        $this->enrollment->attachBootstrap($token, $cursor, $path, (string) $request->string('snapshot_sha256'));
 
         return ApiResponse::success([
-            'join_token_uuid' => $joinToken->uuid,
+            'join_token_uuid' => $token->uuid,
             'cursor' => $cursor,
         ]);
     }

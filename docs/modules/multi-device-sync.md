@@ -76,7 +76,7 @@ actions additionally require the owner seat.
 | POST | `/enroll` | **public** | A joining device redeems a join token — it has no seat yet, so it proves itself with the single-use token in its body. Returns its `sync_token` (once) + the bootstrap handoff. May propose a seat `name`. |
 | GET | `/bootstrap/{joinToken}` | **signed** | The bootstrap snapshot download. Credential-less: the short-lived signature minted for the enrolling device *is* the authorization (ADR 0008 style). Deleted after it is sent. |
 | POST | `/join-tokens` | owner | Mint a single-use, short-TTL join token (rendered as a QR). |
-| POST | `/join-tokens/{joinToken}/bootstrap` | owner | Attach the bootstrap snapshot + cursor `C` + SHA-256 to a token. |
+| POST | `/join-tokens/{joinToken}/bootstrap` | owner | Attach the bootstrap snapshot + cursor `C` + SHA-256 to a token. `{joinToken}` is the **raw `join_token` string** the mint returned (the same value `/enroll` takes), looked up by hash and scoped to the caller's business — never a record uuid, which is never handed out. Multipart fields: file `snapshot`, `cursor` (int ≥0), `snapshot_sha256` (64-hex). Upload this **before** showing the QR so the joiner's snapshot URL exists at redeem time. |
 | GET | `/devices` | seat | The business's seats (any authenticated device). Each seat carries its `name` (nullable). `meta` carries the allowance summary — `device_allowance` and `seats_used` (active, non-revoked count) — so a client renders "N of M phones used" from the **server's** numbers, not a value cached at enrollment. |
 | PATCH | `/devices/{seat}` | owner | Set a seat's display `name` (the owner seat included). Trimmed, capped at 40 chars, blank → null; not unique. |
 | DELETE | `/devices/{seat}` | owner | Revoke a member seat. |
