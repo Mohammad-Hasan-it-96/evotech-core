@@ -186,4 +186,33 @@ class DeviceSyncPushPullTest extends TestCase
         // And no tray notification was sent (doorbell is data-only).
         $this->assertCount(0, $this->push->sent);
     }
+
+    public function test_a_composite_row_uuid_longer_than_36_chars_is_accepted(): void
+    {
+        $owner = $this->establishOwner();
+        $member = $this->enrollMember($owner->seat->business, 'member');
+
+        // Fawateer keys some rows on a prefixed composite id, not a bare uuid —
+        // e.g. 'stock-<sales_items.uuid>' (44 chars). The old max:36 rule 422'd
+        // the whole batch on production (2026-08-31 field test); ADR 0011 §8
+        // widened row_uuid to 64 and the push rule was raised to match.
+        $compositeId = 'stock-'.str_repeat('a', 38); // 44 chars, over the old 36 limit
+
+        $this->push($owner->plaintext, [$this->change($compositeId, 'hlc-001')])
+            ->assertCreated();
+
+        // The sibling pulls it back with the full id intact — not truncated.
+        $memberPull = $this->syncGet('/api/v1/sync/changes', $member->plaintext)->assertOk();
+        $this->assertSame($compositeId, $memberPull->json('data.0.row_uuid'));
+    }
+
+    public function test_a_row_uuid_beyond_64_chars_is_still_rejected(): void
+    {
+        $owner = $this->establishOwner();
+
+        // The rule and the column stay in step at 64: 65 is over the line, so the
+        // batch is rejected before it can reach (and be truncated by) the column.
+        $this->push($owner->plaintext, [$this->change(str_repeat('a', 65), 'hlc-001')])
+            ->assertStatus(422);
+    }
 }
