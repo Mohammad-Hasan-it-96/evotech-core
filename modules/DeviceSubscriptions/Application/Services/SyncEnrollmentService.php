@@ -339,8 +339,48 @@ final class SyncEnrollmentService
 
             $token->forceFill(['consumed_at' => Carbon::now()])->save();
 
+            // Cover the joining device under the owner's subscription (ADR 0011,
+            // Decision 2): link — or, for a brand-new handset, create — its
+            // device_subscriptions row against this business, so check_device
+            // reads the business's licence and the joiner never has to buy its own.
+            $this->linkDeviceToBusiness($business, $deviceId);
+
             return new EnrolledSeat($seat, $generated->plaintext, $this->handoffFor($token));
         });
+    }
+
+    /**
+     * Bind the joining device's licensing row to the business (ADR 0011, Decision 2).
+     *
+     * If the device already registered (it called create_device first and took a
+     * trial), its existing row is simply linked — no duplicate, and its own trial
+     * state stops mattering because the business now governs it. If it never
+     * registered (a first-run "join a shop", the case that matters), a minimal row
+     * is created: it carries no name or phone — we do not invent them, the shop is
+     * already registered by the owner — and it is NOT granted a trial of its own
+     * (that path runs only through registration). Both are idempotent on re-enroll.
+     */
+    private function linkDeviceToBusiness(DeviceBusiness $business, string $deviceId): void
+    {
+        $device = DeviceSubscription::query()
+            ->forDevice($deviceId, $business->app_name)
+            ->lockForUpdate()
+            ->first();
+
+        if ($device !== null) {
+            if ($device->business_id !== $business->id) {
+                $device->forceFill(['business_id' => $business->id])->save();
+            }
+
+            return;
+        }
+
+        (new DeviceSubscription)->forceFill([
+            'app_name' => $business->app_name,
+            'device_id' => $deviceId,
+            'business_id' => $business->id,
+            'is_verified' => false,
+        ])->save();
     }
 
     /**
