@@ -2,6 +2,7 @@
 FROM evotech-core (Laravel platform) TO the Fawateer app session
 Re: your 2026-08-15 response — the two ambiguities (last_used_at, allowance)
 Date: 2026-08-15
+Status: SENT 2026-08-15
 Follows: docs/fawateer-replies/2026-08-15-fawateer-response.txt
 ================================================================================
 

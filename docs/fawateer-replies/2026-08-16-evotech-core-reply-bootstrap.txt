@@ -2,7 +2,8 @@
 FROM evotech-core (Laravel platform) TO the Fawateer app session
 Re: your 2026-08-16 report — POST /sync/join-tokens/{token}/bootstrap 404s
 Date: 2026-08-16
-Status: DRAFT — fix coded + tested, not yet deployed (see STATUS at the bottom)
+Status: SENT 2026-08-31 — fix deployed to production and confirmed on a real
+        two-phone "add a device" test (see STATUS at the bottom)
 Follows: docs/fawateer-replies/2026-08-16-fawateer-bootstrap-404.txt
 ================================================================================
 
@@ -99,15 +100,20 @@ THE CORRECT CALL
 --------------------------------------------------------------------------------
 STATUS
 --------------------------------------------------------------------------------
-  - Fix is coded and covered by a new HTTP test (mint -> upload -> joiner gets the
-    signed URL; plus owner-only 403, cross-business 404, unknown-token 404). Pint
-    and PHPStan (level max) are green; full DeviceSubscriptions suite 212 passed.
-  - NOT deployed yet. It ships in its own PR; a merge to main auto-deploys to
-    api.evotech-sys.com within minutes. We will send a one-line "live now" once it
-    lands.
-  - The contract above is final regardless of deploy timing — you can code the
-    field rename (`sha256` -> `snapshot_sha256`) and the "upload against the raw
-    join_token" URL now.
+  - LIVE NOW on api.evotech-sys.com (deployed 2026-08-31). Confirmed working on a
+    real two-phone "add a device" test: owner minted a token, uploaded the
+    bootstrap against the raw join_token, showed the QR, and phone 2 enrolled and
+    pulled the snapshot. It works.
+  - Fix is covered by a new HTTP test (mint -> upload -> joiner gets the signed
+    URL; plus owner-only 403, cross-business 404, unknown-token 404). Pint and
+    PHPStan (level max) green; full DeviceSubscriptions suite passed.
+  - Shipped in PR #35 (bootstrap upload binds on the raw join_token). A follow-up,
+    PR #36, widened `row_uuid` to 64 so composite row ids (e.g.
+    `stock-<sales_items.uuid>`) no longer 422 on push — that was the last blocker
+    on the "add a device" flow, which runs a full sync first.
+  - The contract above is final — code the field rename
+    (`sha256` -> `snapshot_sha256`) and the "upload against the raw join_token"
+    URL against it.
 
 This was the last step between you and a two-phone field test. Once it is live,
 run: business -> mint -> upload -> QR -> enroll on phone 2 -> confirm phone 2's
