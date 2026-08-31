@@ -5,6 +5,7 @@ namespace Modules\DeviceSubscriptions\Domain\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Modules\Core\Domain\Concerns\HasUuid;
@@ -16,6 +17,7 @@ use Modules\DeviceSubscriptions\Database\Factories\DeviceSubscriptionFactory;
  *
  * @property int $id
  * @property string $uuid
+ * @property int|null $business_id
  * @property string|null $app_name
  * @property string|null $device_id
  * @property string|null $full_name
@@ -231,6 +233,19 @@ class DeviceSubscription extends Model
     public function isFallback(): bool
     {
         return self::isFallbackId($this->device_id);
+    }
+
+    /**
+     * The multi-device business this device belongs to, or null (ADR 0011,
+     * Decision 2). When set, the business — not this row — is the authoritative
+     * source of subscription state (see DeviceSubscriptionService::effectiveStatus).
+     * `business_id` is server-set (owner onboarding / enrollment), never mass-assigned.
+     *
+     * @return BelongsTo<DeviceBusiness, $this>
+     */
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(DeviceBusiness::class, 'business_id');
     }
 
     /**

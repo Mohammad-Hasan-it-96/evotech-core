@@ -3,6 +3,9 @@
 namespace Modules\DeviceSubscriptions\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Modules\DeviceSubscriptions\Application\Services\DeviceSubscriptionService;
+use Modules\DeviceSubscriptions\Domain\Models\DevicePlan;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 use Modules\DeviceSubscriptions\Tests\Feature\Concerns\InteractsWithSync;
 use Tests\TestCase;
@@ -149,6 +152,116 @@ class DeviceSyncEnrollmentTest extends TestCase
         $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => $memberDeviceId])
             ->assertOk()
             ->assertJsonPath('is_verified', 0);
+    }
+
+    public function test_a_joined_member_is_covered_by_the_owners_subscription_without_its_own(): void
+    {
+        // The headline of the 2026-09-01 gap: one paid subscription covers the
+        // shop's seats (ADR 0011, Decision 2). A brand-new handset joins without
+        // ever registering or buying anything of its own.
+        $owner = $this->establishOwner();
+        $memberDeviceId = $this->deviceId('member');
+
+        $this->assertDatabaseMissing('device_subscriptions', ['device_id' => $memberDeviceId]);
+
+        $this->enrollMember($owner->seat->business, 'member');
+
+        // Enrollment created its licensing row, linked to the business — and did
+        // NOT grant it a trial of its own (that runs only through registration).
+        $row = DeviceSubscription::query()->where('device_id', $memberDeviceId)->firstOrFail();
+        $this->assertSame($owner->seat->business->id, $row->business_id);
+        $this->assertFalse($row->is_verified);
+        $this->assertNull($row->trial_expires_at);
+        $this->assertNull($row->plan_id);
+
+        // check_device reports it verified — sourced from the owner's business,
+        // not from this row (which on its own is an unverified blank).
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => $memberDeviceId])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1);
+    }
+
+    public function test_enroll_links_an_existing_member_subscription_without_duplicating_it(): void
+    {
+        $owner = $this->establishOwner();
+        $memberDeviceId = $this->deviceId('member');
+
+        // The member registered first (and took its own trial) before joining.
+        DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => $memberDeviceId,
+        ]);
+
+        $this->enrollMember($owner->seat->business, 'member');
+
+        // Still exactly one row for this device, now linked — never a duplicate.
+        $this->assertSame(1, DeviceSubscription::query()->where('device_id', $memberDeviceId)->count());
+        $this->assertSame(
+            $owner->seat->business->id,
+            DeviceSubscription::query()->where('device_id', $memberDeviceId)->value('business_id'),
+        );
+    }
+
+    public function test_a_members_own_lapsed_trial_no_longer_locks_it_out(): void
+    {
+        $owner = $this->establishOwner();
+        $memberDeviceId = $this->deviceId('member');
+
+        // Its own row is a trial that has already expired — on its own, not active.
+        $ownRow = DeviceSubscription::factory()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => $memberDeviceId,
+            'is_verified' => true,
+            'plan_id' => null,
+            'expires_at' => Carbon::now()->subDay(),
+            'trial_expires_at' => Carbon::now()->subDay(),
+        ]);
+        $this->assertFalse($ownRow->isActive());
+
+        $this->enrollMember($owner->seat->business, 'member');
+
+        // The active business governs now, so the lapsed own-trial is irrelevant.
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => $memberDeviceId])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1);
+    }
+
+    public function test_an_owner_renewal_reaches_the_business_and_re_covers_every_seat(): void
+    {
+        // The tier must admit a member, so retier 'yearly' to 3 (Decision 3).
+        DevicePlan::query()->whereNull('device_app_id')->where('plan_key', 'yearly')
+            ->update(['device_allowance' => 3]);
+
+        $ownerDeviceId = $this->deviceId('owner-device');
+
+        // A licensed owner promotes itself, so its licensing row is linked to the
+        // business (Decision 1). fcm_token nulled: activate() would otherwise push.
+        DeviceSubscription::factory()->active()->create([
+            'app_name' => 'Fawateer',
+            'device_id' => $ownerDeviceId,
+            'fcm_token' => null,
+        ]);
+        $owner = $this->enrollment()->onboardOwner('Fawateer', $ownerDeviceId);
+        $business = $owner->seat->business;
+        $this->enrollMember($business, 'member');
+        $memberDeviceId = $this->deviceId('member');
+
+        // Time passes and the business's seeded subscription lapses: every seat,
+        // the owner included, reads NOT verified.
+        $business->forceFill(['expires_at' => Carbon::now()->subDay()])->save();
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => $memberDeviceId])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 0);
+
+        // The owner renews through the ordinary licence gate…
+        $ownerRow = DeviceSubscription::query()->where('device_id', $ownerDeviceId)->firstOrFail();
+        app(DeviceSubscriptionService::class)->activate($ownerRow, 'yearly');
+
+        // …and the renewal reaches the business, so the member is covered again.
+        $this->assertTrue($business->refresh()->isActive());
+        $this->postJson('/api/check_device', ['app_name' => 'Fawateer', 'device_id' => $memberDeviceId])
+            ->assertOk()
+            ->assertJsonPath('is_verified', 1);
     }
 
     public function test_a_device_joining_an_existing_shop_recovers_a_siblings_unpulled_change(): void

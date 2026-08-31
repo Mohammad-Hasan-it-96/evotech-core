@@ -5,8 +5,11 @@ namespace Modules\DeviceSubscriptions\Application\Services;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Modules\Core\Domain\Contracts\AuditLogger;
+use Modules\DeviceSubscriptions\Application\DTO\DeviceEffectiveStatus;
 use Modules\DeviceSubscriptions\Domain\Contracts\DevicePushNotifier;
 use Modules\DeviceSubscriptions\Domain\Events\DeviceActivated;
+use Modules\DeviceSubscriptions\Domain\Models\DeviceBusiness;
+use Modules\DeviceSubscriptions\Domain\Models\DevicePlan;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSeat;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 
@@ -27,6 +30,47 @@ final class DeviceSubscriptionService
     public function find(string $deviceId, string $appName): ?DeviceSubscription
     {
         return DeviceSubscription::query()->forDevice($deviceId, $appName)->first();
+    }
+
+    /**
+     * The subscription state check_device / create_device should report for a
+     * device (ADR 0011, Decision 2).
+     *
+     * When the device is linked to a business (`business_id` set), the BUSINESS
+     * row is the authoritative source of expiry / plan / verification — one paid
+     * subscription covers all the shop's seats, and a member device that joined an
+     * existing shop may never have held its own trial. When unlinked (every
+     * Fawateer 1.0.1 install), the device's own row governs, exactly as before —
+     * so this is purely additive.
+     *
+     * Note: the seat-revocation coupling and `google_account` masking stay on the
+     * device itself; this resolves only the four subscription fields.
+     */
+    public function effectiveStatus(DeviceSubscription $device): DeviceEffectiveStatus
+    {
+        $source = $this->subscriptionSource($device);
+
+        return new DeviceEffectiveStatus(
+            isActive: $source->isActive(),
+            isOnTrial: $source->isOnTrial(),
+            planId: $source->plan_id,
+            expiresAt: $source->expires_at,
+        );
+    }
+
+    /**
+     * The row that governs a device's subscription state: its business when
+     * linked, otherwise the device itself (ADR 0011, Decision 2). Falls back to
+     * the device row if a linked business cannot be loaded — a linked device is
+     * never treated as worse off than an unlinked one.
+     */
+    private function subscriptionSource(DeviceSubscription $device): DeviceSubscription|DeviceBusiness
+    {
+        if ($device->business_id === null) {
+            return $device;
+        }
+
+        return $device->business()->first() ?? $device;
     }
 
     /**
@@ -246,6 +290,13 @@ final class DeviceSubscriptionService
             'status' => null,
         ]);
 
+        // A device that owns a multi-device business must carry its renewal to the
+        // business, because the business — not this row — is what check_device
+        // reads for every seat (ADR 0011, Decision 2). Without this, the owner
+        // could pay and still watch every phone (its own included) lapse on the
+        // expiry seeded at onboarding.
+        $this->propagateActivationToBusiness($device, $planId, $expiresAt);
+
         DeviceActivated::dispatch($device);
 
         if ($device->fcm_token) {
@@ -264,6 +315,40 @@ final class DeviceSubscriptionService
         }
 
         return $device;
+    }
+
+    /**
+     * Carry an owner's renewal onto its business (ADR 0011, Decision 2).
+     *
+     * The business holds the authoritative expiry / plan / verification for every
+     * seat, so activating the device that owns it must update the business too.
+     * The allowance only ever GROWS here (a tier upgrade adds phones); it is never
+     * shrunk on activation, so a downgrade can never strand an already-enrolled
+     * phone mid-shift. A device with no business (every plain licensing device) is
+     * left untouched.
+     */
+    private function propagateActivationToBusiness(DeviceSubscription $device, string $planId, Carbon $expiresAt): void
+    {
+        if ($device->business_id === null) {
+            return;
+        }
+
+        $business = $device->business()->first();
+
+        if (! $business instanceof DeviceBusiness) {
+            return;
+        }
+
+        $resolved = DevicePlan::allowanceFor($planId, (string) $device->app_name);
+
+        $business->update([
+            'is_verified' => true,
+            'plan_id' => $planId,
+            'expires_at' => $expiresAt,
+            'device_allowance' => $resolved !== null
+                ? max($business->device_allowance, $resolved)
+                : $business->device_allowance,
+        ]);
     }
 
     /**
