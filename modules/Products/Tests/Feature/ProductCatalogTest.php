@@ -57,7 +57,9 @@ class ProductCatalogTest extends TestCase
         $this->seed(ProductCatalogSeeder::class);
 
         $this->assertSame(5, Product::count());
-        $this->assertSame(10, Plan::count());
+        // 5 products × 2 plans, except ledger (the دفتر حسابات app), whose prices are
+        // device plans at /api/daftar/getPlans — see migration 2026_10_06_130000.
+        $this->assertSame(8, Plan::count());
         $this->assertDatabaseHas('products', ['slug' => 'smart-delegate']);
     }
 }

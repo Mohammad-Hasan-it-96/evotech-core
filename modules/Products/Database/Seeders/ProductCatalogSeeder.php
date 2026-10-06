@@ -94,17 +94,17 @@ class ProductCatalogSeeder extends Seeder
                 ],
             ],
             [
+                // The دفتر حسابات app (device app daftar_hesabat). Its prices are the
+                // device plans at /api/daftar/getPlans, not company plans, so it has
+                // none here (see migration 2026_10_06_130000).
                 'slug' => 'ledger',
-                'name' => ['ar' => 'دفتر الحسابات', 'en' => 'Ledger'],
-                'tagline' => ['ar' => 'دفتر حساباتك في جيبك', 'en' => 'Your accounts, in your pocket'],
-                'description' => ['ar' => 'سجّل المقبوضات والمدفوعات وتابع أرصدة العملاء والموردين.', 'en' => 'Record income and expenses, track customer and supplier balances.'],
+                'name' => ['ar' => 'دفتر حسابات', 'en' => 'Daftar Hesabat'],
+                'tagline' => ['ar' => 'دفتر الديون صار على موبايلك', 'en' => 'The debt notebook for your shop, on your phone'],
+                'description' => ['ar' => 'سجّل ديون زبائنك ودفعاتهم، واعرف رصيد كل زبون فوراً. مجاني بلا حدود ويعمل بلا إنترنت، وبياناتك تبقى على هاتفك. Pro يضيف تذكير واتساب، ونسخاً احتياطياً إلى Google Drive، وتحويل الليرة الجديدة.', 'en' => 'Record the debts and payments of your customers and see every balance instantly. Free with no limits, works offline, and your data stays on your phone. Pro adds WhatsApp reminders, Google Drive backup and the new-lira conversion.'],
                 'icon' => 'book',
-                'platforms' => ['Android', 'iOS'],
+                'platforms' => ['Android'],
                 'is_featured' => true,
-                'plans' => [
-                    $basic(15, [['ar' => 'حساب واحد', 'en' => '1 account']]),
-                    $pro(39, [['ar' => 'حسابات متعددة', 'en' => 'Multiple accounts'], ['ar' => 'تقارير شهرية', 'en' => 'Monthly reports']]),
-                ],
+                'plans' => [],
             ],
             [
                 'slug' => 'restaurant',
