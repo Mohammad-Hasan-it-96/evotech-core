@@ -439,6 +439,12 @@ day.
 
 ## 8. دفتر حسابات (`daftar_hesabat`) — S2, the legacy re-import
 
+> **Not needed (owner, 2026-10-06): the app has no real users.** The 2 legacy
+> `daftar_hesabat` devices, including the 1 "with a real plan", were the owner's own or test
+> installs, like Fawateer's in §2. Nothing to re-import, and `DEVICE_LEGACY_*` never needs to
+> be set. The runbook below is kept only as a reference for any future per-app re-import
+> (the `--app` scope and the drift report apply to every app).
+
 **State (2026-10-06).** The app row exists in production (#39: slug `daftar`, 14-day trial,
 remote config live at `/config/daftar.json`). Both legacy devices (§2: 2 rows, **1 with a
 real plan**, 0 lifetime) arrived with the all-apps import of 2026-07-22. The old server is
