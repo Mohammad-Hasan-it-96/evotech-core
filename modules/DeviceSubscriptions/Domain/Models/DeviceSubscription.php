@@ -56,6 +56,20 @@ class DeviceSubscription extends Model
     public const FALLBACK_DEVICE_ID = 'fallback_device_id';
 
     /**
+     * Other apps' unreadable-id fallbacks, which arrive **hashed** rather than as
+     * the literal above, so they would otherwise look like one real device.
+     *
+     * - `daftar_hesabat`: sha256('accounting_book_fallback' . '_accounting_book_app').
+     *   Unlike Fawateer's, this one is NOT transient: that client persists whatever
+     *   id it computed, so a device that fell back once keeps the shared value. It
+     *   is quarantined all the same (one row must never hand a trial or a paid plan
+     *   to unrelated shops); the client fix is to stop persisting the fallback.
+     */
+    private const HASHED_FALLBACK_DEVICE_IDS = [
+        'c7a2909940db38ce0aae5f5a07deb0297125ac323da7fb866eca19a77621c7ea',
+    ];
+
+    /**
      * `status` tracks the purchase intent only, never the subscription.
      *
      * PENDING is written by the app when the user asks to buy; the operator then
@@ -226,7 +240,8 @@ class DeviceSubscription extends Model
      */
     public static function isFallbackId(?string $deviceId): bool
     {
-        return $deviceId === self::FALLBACK_DEVICE_ID;
+        return $deviceId === self::FALLBACK_DEVICE_ID
+            || in_array($deviceId, self::HASHED_FALLBACK_DEVICE_IDS, true);
     }
 
     /** True when this row is the shared bucket rather than one device. */
