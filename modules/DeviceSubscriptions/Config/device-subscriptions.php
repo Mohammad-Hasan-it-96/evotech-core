@@ -91,6 +91,23 @@ return [
                 'credentials' => env('FIREBASE_CREDENTIALS_SMARTAGENT'),
             ],
         ],
+        /*
+         * دفتر حسابات (Ledger). `daftar_hesabat` is the literal string its shipped
+         * builds send — including the paying device on the legacy backend — so it is
+         * the identity, not a label. Trial: 14 days (owner decision D1). It reads the
+         * shared catalog. It has no Firebase project yet: leave the env unset and
+         * pushes for it no-op with a warning (unlock then happens on the app's
+         * next check_device).
+         */
+        'daftar_hesabat' => [
+            'label' => 'دفتر حسابات',
+            'trial_days' => 14,
+            'slug' => 'daftar',
+            'firebase' => [
+                'project_id' => env('FIREBASE_PROJECT_ID_DAFTAR'),
+                'credentials' => env('FIREBASE_CREDENTIALS_DAFTAR'),
+            ],
+        ],
     ],
 
     /*

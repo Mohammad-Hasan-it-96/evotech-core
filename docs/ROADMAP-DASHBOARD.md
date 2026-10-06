@@ -116,9 +116,9 @@ is neither editable nor surfaced anywhere.
 
 ## Phase 5 — Odds and ends worth doing
 
-- **`daftar_hesabat` (Ledger) has no config entry.** It is quietly live on the legacy
-  backend with a paying device. Add `apps.daftar_hesabat` (label + trial policy) before
-  its cutover, or it gets defaults and its users see a raw slug in push copy.
+- ~~**`daftar_hesabat` (Ledger) has no config entry.**~~ Done (2026-10-06): config entry +
+  migration `2026_10_06_100000` (slug `daftar`, label «دفتر حسابات», 14-day trial, shared
+  plans, remote config). Its legacy devices still need the import before its cutover.
 - **Per-app plan editing from the UI.** Plans are config today (Phase D). A screen means
   no deploy to change a price — but it means moving the catalog to the database first.
   Not free; worth it only if pricing changes often.

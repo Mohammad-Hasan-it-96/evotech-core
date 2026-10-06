@@ -231,6 +231,9 @@ case-insensitively), editable from the dashboard:
 |---|---|---|
 | `Fawateer` | 30 | فواتير |
 | `SmartAgent` | 0 (none) | المندوب الذكي |
+| `daftar_hesabat` | 14 | دفتر حسابات |
+
+`daftar_hesabat` (slug `daftar`, product `ledger`) was added by migration `2026_10_06_100000`, because production ran the config seed before it had a config entry. It reads the shared catalog and has no Firebase project yet (`FIREBASE_*_DAFTAR` unset → pushes no-op). Its client hashes its unreadable-id fallback, so `DeviceSubscription::isFallbackId()` also matches that hash (`HASHED_FALLBACK_DEVICE_IDS`). Unlike Fawateer's, it is **persisted by the client**, not transient.
 
 Firebase credentials stay in **config** and are deliberately *not* part of the editable catalog:
 the value is a path to a service-account private key, which has no business being writable from a
