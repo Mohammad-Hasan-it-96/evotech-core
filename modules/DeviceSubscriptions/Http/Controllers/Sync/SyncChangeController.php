@@ -33,7 +33,7 @@ final class SyncChangeController extends SyncController
     {
         $request->validate([
             'changes' => ['required', 'array', 'min:1', 'max:500'],
-            'changes.*.row_uuid' => ['required', 'string', 'max:36'],
+            'changes.*.row_uuid' => ['required', 'string', 'max:64'],
             'changes.*.table_name' => ['required', 'string', 'max:40'],
             'changes.*.op' => ['nullable', 'in:upsert,delete'],
             'changes.*.authored_hlc' => ['required', 'string', 'max:40'],

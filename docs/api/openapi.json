@@ -7952,7 +7952,7 @@
                                             "properties": {
                                                 "row_uuid": {
                                                     "type": "string",
-                                                    "maxLength": 36
+                                                    "maxLength": 64
                                                 },
                                                 "table_name": {
                                                     "type": "string",

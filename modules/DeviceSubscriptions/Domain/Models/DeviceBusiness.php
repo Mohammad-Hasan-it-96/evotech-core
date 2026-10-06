@@ -76,6 +76,20 @@ class DeviceBusiness extends Model
     }
 
     /**
+     * On a trial rather than a paid plan — the business twin of
+     * {@see DeviceSubscription::isOnTrial()}. Derived from state: a trial expiry is
+     * set, no paid plan yet, still unlocked. Surfaced as `is_trial` on check_device
+     * for a device whose subscription state is sourced from this business
+     * (ADR 0011, Decision 2).
+     */
+    public function isOnTrial(): bool
+    {
+        return $this->trial_expires_at !== null
+            && $this->plan_id === null
+            && $this->isActive();
+    }
+
+    /**
      * Live seat count = non-revoked seats. Seats are enforced at the business
      * level, never per device (Decision 3).
      */

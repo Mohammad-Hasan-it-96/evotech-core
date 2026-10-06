@@ -57,6 +57,17 @@ final class DeviceController
             status: $this->optional($request, 'status'),
         );
 
+        // Effective state, so a device linked to a multi-device business answers
+        // from the business's licence, not its own (ADR 0011, Decision 2). For an
+        // unlinked device (every 1.0.1 install) this is its own row, unchanged.
+        $status = $this->devices->effectiveStatus($device);
+
+        $verified = $status->isActive
+            && ! $this->devices->isSeatRevoked(
+                (string) $request->string('device_id'),
+                (string) $request->string('app_name'),
+            );
+
         return response()->json([
             // isActive(), not the raw column: legacy only forced is_verified to 0
             // past expiry on check_device, so create_device could answer
@@ -64,10 +75,10 @@ final class DeviceController
             // device was operator-activated; with trials it means a device whose
             // trial has lapsed re-registers and is told it is verified. Both
             // endpoints now answer with one definition.
-            'is_verified' => (int) $device->isActive(),
-            'is_trial' => (int) $device->isOnTrial(),
-            'expires_at' => $device->expires_at,
-            'plan' => $device->plan_id,
+            'is_verified' => (int) $verified,
+            'is_trial' => (int) $status->isOnTrial,
+            'expires_at' => $status->expiresAt,
+            'plan' => $status->planId,
             'fcm_token' => $device->fcm_token,
             'server_time' => Carbon::now()->toISOString(),
         ]);
@@ -94,10 +105,17 @@ final class DeviceController
             return $this->notFound();
         }
 
+        // Effective state, sourced from the business when this device is linked to
+        // one (ADR 0011, Decision 2): a member device that joined an existing shop
+        // is covered by the owner's subscription, even though its own row may be a
+        // lapsed trial or was never registered. Unlinked devices read their own
+        // row exactly as before.
+        $status = $this->devices->effectiveStatus($device);
+
         // A revoked multi-device-sync seat forces NOT verified (ADR 0011, D) — the
         // one coupling between the sync and licensing credentials. Additive: a
         // device with no seat (every 1.0.1 install) is unaffected.
-        $verified = $device->isActive()
+        $verified = $status->isActive
             && ! $this->devices->isSeatRevoked(
                 (string) $request->string('device_id'),
                 (string) $request->string('app_name'),
@@ -106,9 +124,9 @@ final class DeviceController
         return response()->json([
             'success' => true,
             'is_verified' => (int) $verified,
-            'is_trial' => (int) $device->isOnTrial(),
-            'plan' => $device->plan_id,
-            'expires_at' => $device->expires_at,
+            'is_trial' => (int) $status->isOnTrial,
+            'plan' => $status->planId,
+            'expires_at' => $status->expiresAt,
             /*
              * Masked, never raw — and that is load-bearing, not cosmetic.
              *

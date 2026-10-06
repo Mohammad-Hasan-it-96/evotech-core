@@ -125,6 +125,24 @@ A device re-enrolling under the same id **reuses its slot and rotates its
 credential** rather than consuming a second seat. The seat's `app_name` is taken
 from the business, never from the joining device.
 
+### One subscription covers the seats (Decision 2)
+
+Enrollment also **binds the joining device to the business's licence**, so a member
+is covered by the owner's subscription and never has to buy its own. `enroll()`:
+
+- **links** the device's existing `device_subscriptions` row (it registered first
+  and took its own trial) by setting `business_id` — no duplicate; or
+- **creates** a minimal row when the device never registered — the first-run "join
+  a shop" case. That row carries **no name or phone** (we do not invent them; the
+  shop is already registered by the owner) and gets **no trial of its own** (the
+  trial path runs only through `create_device`).
+
+From then on `check_device`/`create_device` read the **business** as the
+authoritative source of `expires_at`/`plan`/`is_verified` for that device (see the
+coupling below), so a lapsed or missing own-trial no longer locks a joined phone
+out. The allowance is the only thing that limits seats, which is what the tiers
+sell.
+
 ### The bootstrap cursor is the owner's own cursor `C`
 
 The seed carries a `cursor` — the seq the joiner pulls from after applying the
@@ -163,6 +181,18 @@ credential stops authenticating (401). Two invariants:
 makes the legacy `check_device` report **NOT verified**. This is purely additive —
 a device with no seat (every 1.0.1 install) is unaffected, and a re-admitted device
 (active seat) is verified again.
+
+Two halves of the same coupling, both keyed on `business_id` being set (Decision 2):
+
+- **The business is the licence source.** For a linked device, `check_device` and
+  `create_device` report the **business's** `expires_at`/`plan`/`is_verified`, not
+  the device's own row (`DeviceSubscriptionService::effectiveStatus`). An unlinked
+  device (every 1.0.1 install) reads its own row exactly as before.
+- **Renewal reaches every seat.** Activating the owner device carries the new
+  expiry/plan onto its business (`activate()` → the business), and the allowance
+  only ever **grows** there (a tier upgrade adds phones; a downgrade never strands
+  an enrolled one mid-shift). Without this, an owner could pay and still watch every
+  phone lapse on the expiry seeded at onboarding.
 
 ## Push and pull
 
@@ -246,7 +276,7 @@ response instead of delete-after-send.
 
 - `DeviceSyncGuardTest` — missing/invalid/revoked token → 401; cross-business seat access → 404; a business scopes only its own seats.
 - `DeviceSyncOwnerOnboardingTest` — a verified device establishes its business + owner seat and links the licensing row; idempotent token rotation; `SUBSCRIPTION_REQUIRED` for unverified/unknown devices; fallback-id rejection; plan-derived allowance admitting a member.
-- `DeviceSyncEnrollmentTest` — owner-only mint; enroll returns seat + bootstrap cursor; allowance/fallback/single-use/owner-non-revocable rules; revoked seat → `check_device` NOT verified; the 3-device distinguishing bootstrap case.
+- `DeviceSyncEnrollmentTest` — owner-only mint; enroll returns seat + bootstrap cursor; allowance/fallback/single-use/owner-non-revocable rules; revoked seat → `check_device` NOT verified; **a joined member is covered by the owner's subscription (link/create, no own trial), a lapsed own-trial no longer locks it out, and an owner renewal reaches the business** (Decision 2); the 3-device distinguishing bootstrap case.
 - `DeviceSyncPushPullTest` — monotonic gap-free seqs; per-row idempotency; no-echo; the examined-not-returned watermark; per-business isolation; LWW by HLC under out-of-order arrival; the data-only doorbell to siblings only.
 
 ## Retention (Decision 14)

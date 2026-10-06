@@ -1,0 +1,92 @@
+TO:      evotech-core
+FROM:    Fawateer (Plan 002, multi-device sync)
+DATE:    2026-09-01
+SUBJECT: a joined member device gets a seat but no subscription, so the
+         licence gate still blocks it
+
+Question first, because the answer decides a UI we are about to build:
+**does a device that joins an existing sync business need its own paid
+subscription, or is it covered by the owner's?**
+
+ADR 0011 opens with "One subscription = one business owning N devices",
+and the plan tiers sell 1/3/5 seats. Read plainly, that says the owner's
+subscription covers the seats. The code does not do that yet.
+
+WHAT THE CODE DOES TODAY
+
+  onboardOwner()  -> creates the DeviceSeat AND links
+                     device_subscriptions.business_id, "so check_device reads
+                     the business thereafter" (your own docblock, §Decision 1/30).
+
+  enroll()        -> creates the DeviceSeat and NOTHING ELSE. It never touches
+                     device_subscriptions.
+
+And `check_device` resolves purely by (device_id, app_name) against
+device_subscriptions (DeviceSubscriptionService::find). A joined member device
+has a seat but no subscription row tied to the business, so as far as licensing
+is concerned it is an unknown device.
+
+WHY IT LOOKS LIKE IT WORKS
+
+A fresh phone calls create_device first and is given the free trial (Plan 006).
+So a second phone joins, syncs, sells — and stops working when its own trial
+ends, with a plans screen asking the shopkeeper to buy a second subscription
+for a shop they have already paid for. In a field test the failure is weeks
+away from the action that caused it.
+
+WHAT WE THINK IS RIGHT
+
+DECIDED ON OUR SIDE, 2026-09-01: the owner's subscription covers the seats.
+
+`enroll()` should link the joining device the way `onboardOwner()` links the
+owner: set `device_subscriptions.business_id`, and let `check_device` answer
+from the business's subscription state (expiry, plan, verification) for any
+device holding an active, non-revoked seat.
+
+**Please CREATE the `device_subscriptions` row when it is absent**, rather than
+only linking an existing one. This is the part that matters for a brand-new
+handset, and it is not a detail: `create_device` validates `phone` as
+`required`, so a phone that has never been registered cannot get a row without
+asking its user for a name and a number. On a joining device we have neither
+and should not invent them — the shop is already registered, by the owner. The
+enrol request carries `device_id`, `app_name` and the proposed device name,
+which is everything the row needs.
+
+Without that, the first-run "join a shop" screen has to send the user through
+the registration form first, which is exactly the detour it exists to remove.
+
+Then:
+
+  - the allowance is the only thing that limits seats, which is what the tiers
+    are already sold on;
+  - revoking a seat stops that phone selling at its next check, bounded by our
+    existing 7-day offline grace — which is what `syncRevokeBody` already tells
+    the owner happens, and today is not true for the licence half;
+  - a member device that leaves the business falls back to its own row.
+
+If instead each phone is meant to hold its own paid subscription, say so and we
+will keep the current behaviour — but then the tier allowance and the wording
+around it need rethinking on both sides, because "3 devices" currently reads to
+a shopkeeper as "three phones, one price".
+
+WHAT IS BLOCKED ON THE ANSWER
+
+The first-run screen. We want a new phone to open on "create a new shop" or
+"join a shop", instead of a registration form followed by a hunt through
+Settings. If the owner's subscription covers seats, "join a shop" skips
+registration entirely and the joining phone never sees a plans screen. If it
+does not, joining has to register and take a trial first, and the screen is
+only a reordering of what exists.
+
+We are not building it until we know which.
+
+RELATED, ALREADY HANDLED ON OUR SIDE (no action needed)
+
+  - A linked phone no longer writes backups to Google Drive; the main phone
+    owns the shop's backup history. Restore stays available on both.
+  - A Drive restore on a linked phone now tells the owner to link the other
+    phones again: restored rows carry `updated_at = ''` and so never replicate,
+    and re-linking reseeds them through the bootstrap snapshot. We deliberately
+    do NOT re-stamp and push a restored catalogue — that would claim this
+    device authored every row at restore time and beat a genuine later edit on
+    the other till under last-write-wins.
