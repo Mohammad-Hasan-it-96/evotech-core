@@ -64,6 +64,26 @@ return [
             ]) : [],
         ],
 
+        /*
+         * The legacy backend's database, read-only source for
+         * `device-subscriptions:import-legacy` (docs/GO-LIVE-FAWATEER.md §5.1).
+         * Inert until DEVICE_LEGACY_CONNECTION=legacy and the DEVICE_LEGACY_* values
+         * are set: nothing connects to it otherwise. Collation matches app_harfoshs.
+         */
+        'legacy' => [
+            'driver' => 'mysql',
+            'host' => env('DEVICE_LEGACY_HOST', '127.0.0.1'),
+            'port' => env('DEVICE_LEGACY_PORT', '3306'),
+            'database' => env('DEVICE_LEGACY_DATABASE'),
+            'username' => env('DEVICE_LEGACY_USERNAME'),
+            'password' => env('DEVICE_LEGACY_PASSWORD'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_0900_ai_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

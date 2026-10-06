@@ -434,3 +434,64 @@ day.
 
 > **Never flip Fawateer and SmartAgent on the same day** (§7) — separate remote-config files
 > exist precisely so a bad cutover stays contained to one product.
+
+---
+
+## 8. دفتر حسابات (`daftar_hesabat`) — S2, the legacy re-import
+
+**State (2026-10-06).** The app row exists in production (#39: slug `daftar`, 14-day trial,
+remote config live at `/config/daftar.json`). Both legacy devices (§2: 2 rows, **1 with a
+real plan**, 0 lifetime) arrived with the all-apps import of 2026-07-22. The old server is
+still live, and old Daftar builds still talk to it, so that July snapshot **may have
+drifted**: a renewal there is invisible here. A missing or stale paid row costs the owner
+their plan, as described in §2. Unlike SmartAgent, the 14-day trial would hide that for
+two weeks.
+
+The July check counted **0** rows on the shared fallback id, but it only looked for the
+literal `fallback_device_id`. Daftar's fallback is **hashed**
+(`c7a29099…c7ea`; see `DeviceSubscription::HASHED_FALLBACK_DEVICE_IDS`), and the
+current app re-derives it. A paid row stored under that id belongs to no device and
+would need a manual re-key. The report below counts it.
+
+### Runbook (on the API server)
+
+`config/database.php` now ships a `legacy` connection, so only `.env` changes. These are the
+same values as §5.1 step 2:
+
+```
+DEVICE_LEGACY_CONNECTION=legacy
+DEVICE_LEGACY_HOST=...          # or an SSH tunnel, then DEVICE_LEGACY_PORT=3307
+DEVICE_LEGACY_DATABASE=...
+DEVICE_LEGACY_USERNAME=...      # a read-only user is enough
+DEVICE_LEGACY_PASSWORD=...
+```
+
+```bash
+php artisan config:clear
+mysqldump -u <user> -p evotech_core device_subscriptions > device_subscriptions_before_daftar.sql
+
+# 1. Drift check — writes nothing, prints counts only (no names/phones)
+php artisan device-subscriptions:import-legacy --app=daftar_hesabat --dry-run
+```
+
+Expected: `daftar_hesabat | 2 | 0 | ? | ? | 1 | 0`. That reads rows 2, new 0, changed ?,
+unchanged ?, with plan 1, fallback ids 0.
+
+| Report says | Meaning | Action |
+|---|---|---|
+| `changed 0` | July copy is current | nothing to write; done |
+| `changed ≥ 1` | renewed/edited on the old server since July | run step 2 |
+| `new ≥ 1` | a device registered on the old server after July | run step 2 |
+| `fallback ids ≥ 1` (+ warning) | a plan sits on the shared hashed id | **stop**: re-key by hand with the owner |
+
+```bash
+# 2. Apply — upserts Daftar rows only; never touches SmartAgent/Fawateer
+php artisan device-subscriptions:import-legacy --app=daftar_hesabat
+
+# 3. Re-run the dry run: must now read changed 0, new 0
+php artisan device-subscriptions:import-legacy --app=daftar_hesabat --dry-run
+```
+
+**Run it again right before the new Daftar build ships** (T1.6). The report makes that a
+10-second check. After the last old-build user has updated, the new server is authoritative:
+stop importing, then retire the legacy host (S4).

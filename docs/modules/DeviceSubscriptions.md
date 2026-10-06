@@ -264,7 +264,7 @@ activation converts it by setting `plan_id`, which ends the trial by definition;
 | `Application\Services\DeviceCatalogService` | catalog writes, audit trail, cache flush, and the delete guard (`subscriberCount()`). |
 | `Domain\Contracts\DevicePushNotifier` | push abstraction; `NullPushNotifier` (safe default), `FirebasePushNotifier` (FCM HTTP v1 — set `DEVICE_PUSH_NOTIFIER=firebase`). |
 | `Console\SweepDeviceExpiryCommand` | `device-subscriptions:sweep-expiry` — **scheduled daily**; sends expiry pushes at expired/7/3/1 days (replaces the legacy cron endpoint). |
-| `Console\ImportLegacyDevicesCommand` | `device-subscriptions:import-legacy` — one-off, re-runnable import of `app_harfoshs` from a separate DB connection (`DEVICE_LEGACY_CONNECTION`); `--dry-run` supported. |
+| `Console\ImportLegacyDevicesCommand` | `device-subscriptions:import-legacy` — re-runnable import of `app_harfoshs` from the `legacy` DB connection (`DEVICE_LEGACY_*`); `--app=` scopes it to one product, and every run prints a per-app new/changed/unchanged/with-plan/fallback report (counts only, no PII); `--dry-run` supported. |
 
 - Cross-module coordination is by **event** only (§2.1): `DeviceActivated` is available for
   `Notifications`/`Audit` to listen to; the module depends on neither.
