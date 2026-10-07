@@ -289,6 +289,8 @@ Opt-in per app (`device-subscriptions.statements.apps`, only `daftar_hesabat`), 
 | `POST /api/{app}/statements` | device (`app_name`, `device_id`, `statement`) | `201 {token, url, expires_at}`. Only registered, non-fallback devices of enabled apps. `throttle:statement-create` (10/min per device, 30/min per IP). |
 | `DELETE /api/{app}/statements/{token}` | the creating device only | `204`; hard delete. |
 | `GET /api/v1/statements/{token}` | public (evotech-web) | `{data: snapshot + expires_at}`, `Cache-Control: private, no-store`. `throttle:statement-read` (60/min per IP). |
+| `GET /api/v1/device-subscriptions/{device}/statements` | staff (`auth:sanctum`) | That device's **live** links: `customer_name`, `currency`, `entries_count`, `created_at`, `expires_at`. No amounts or entries (only the link holder sees those) and no URL (the token is unrecoverable). The device listing also carries `statements_count`. |
+| `DELETE /api/v1/device-statements/{statement}` | staff | Stops a link now (e.g. the customer it describes asked). Audited as `device_statement.deleted` **without its content**. |
 
 - **It holds a third party's data, so it is minimal by construction:**
   - The snapshot is a closed schema: shop name, customer name, currency, balance, totals, generated_at,

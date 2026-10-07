@@ -4997,6 +4997,94 @@
                 }
             }
         },
+        "/v1/device-subscriptions/{deviceSubscription}/statements": {
+            "get": {
+                "operationId": "v1.device-subscriptions.statements.index",
+                "summary": "GET /api/v1/device-subscriptions/{deviceSubscription}/statements \u2014 live links, newest first",
+                "tags": [
+                    "DeviceStatementAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "deviceSubscription",
+                        "in": "path",
+                        "required": true,
+                        "description": "The device subscription UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `DeviceStatementResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/DeviceStatementResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/device-statements/{deviceStatement}": {
+            "delete": {
+                "operationId": "v1.device-statements.destroy",
+                "summary": "DELETE /api/v1/device-statements/{deviceStatement} \u2014 stop a link now",
+                "tags": [
+                    "DeviceStatementAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "deviceStatement",
+                        "in": "path",
+                        "required": true,
+                        "description": "The device statement UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {}
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
         "/v1/downloads/events": {
             "get": {
                 "operationId": "v1.downloads.events.index",
@@ -9669,6 +9757,34 @@
                 ],
                 "title": "DevicePlanResource"
             },
+            "DeviceStatementResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "customer_name": {},
+                    "currency": {},
+                    "entries_count": {
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "expires_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "customer_name",
+                    "currency",
+                    "entries_count",
+                    "created_at",
+                    "expires_at"
+                ],
+                "title": "DeviceStatementResource"
+            },
             "DeviceSubscription": {
                 "type": "object",
                 "properties": {
@@ -9933,6 +10049,10 @@
                     },
                     "referral_rewards_count": {
                         "type": "integer"
+                    },
+                    "statements_count": {
+                        "type": "integer",
+                        "description": "Live shared statement links (ADR 0013); present on the listing."
                     },
                     "stars": {
                         "type": [

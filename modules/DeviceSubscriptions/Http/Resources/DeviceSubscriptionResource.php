@@ -50,6 +50,8 @@ class DeviceSubscriptionResource extends JsonResource
                 'full_name' => $this->referredBy->full_name,
             ]),
             'referral_rewards_count' => $this->whenCounted('referralRewards'),
+            // Live shared statement links (ADR 0013); present on the listing.
+            'statements_count' => $this->whenCounted('statements'),
             'stars' => $this->stars,
             'comment' => $this->comment,
             'created_at' => $this->created_at?->toIso8601String(),

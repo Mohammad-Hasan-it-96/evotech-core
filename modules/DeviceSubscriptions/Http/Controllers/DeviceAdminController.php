@@ -93,7 +93,10 @@ final class DeviceAdminController extends ApiController
 
         $devices = DeviceSubscription::query()
             ->with('referredBy:id,uuid,full_name')
-            ->withCount(['referralRewards' => fn (Builder $query): Builder => $query->where('days', '>', 0)])
+            ->withCount([
+                'referralRewards' => fn (Builder $query): Builder => $query->where('days', '>', 0),
+                'statements' => fn (Builder $query): Builder => $query->where('expires_at', '>', now()),
+            ])
             ->when(
                 $request->filled('status'),
                 fn (Builder $query): Builder => $query->where('status', (string) $request->string('status')),

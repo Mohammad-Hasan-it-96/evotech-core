@@ -6,10 +6,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
+use Laravel\Sanctum\Sanctum;
 use Modules\DeviceSubscriptions\Application\Services\DeviceStatementService;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceStatement;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
+use Modules\Users\Domain\Models\User;
 use Tests\TestCase;
 
 /**
@@ -219,5 +222,75 @@ class DeviceStatementTest extends TestCase
 
         $this->assertSame(0, DeviceStatement::query()->count());
         $this->getJson("/api/v1/statements/{$token}")->assertNotFound();
+    }
+
+    // ─── Staff console ──────────────────────────────────────────────────────────
+
+    private function staff(): void
+    {
+        Sanctum::actingAs(User::factory()->create(), ['*']);
+    }
+
+    private function shopA(): DeviceSubscription
+    {
+        return DeviceSubscription::query()->where('device_id', 'shop-a')->sole();
+    }
+
+    public function test_the_console_is_staff_only(): void
+    {
+        $this->getJson("/api/v1/device-subscriptions/{$this->shopA()->uuid}/statements")->assertUnauthorized();
+
+        $this->token();
+        $id = DeviceStatement::query()->sole()->uuid;
+        $this->deleteJson("/api/v1/device-statements/{$id}")->assertUnauthorized();
+        $this->assertSame(1, DeviceStatement::query()->count());
+    }
+
+    public function test_the_listing_counts_live_links_per_device(): void
+    {
+        $this->token();
+        $this->travel(31)->days();
+        $this->token();
+        $this->token();
+        $this->staff();
+
+        $this->getJson('/api/v1/device-subscriptions?app_name='.self::APP)
+            ->assertOk()
+            ->assertJsonFragment(['device_id' => 'shop-a', 'statements_count' => 2]);
+    }
+
+    public function test_staff_see_who_and_when_but_not_the_amounts(): void
+    {
+        $this->token();
+        $this->staff();
+
+        $row = $this->getJson("/api/v1/device-subscriptions/{$this->shopA()->uuid}/statements")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.customer_name', 'أبو محمد')
+            ->assertJsonPath('data.0.currency', 'ليرة جديدة')
+            ->assertJsonPath('data.0.entries_count', 2)
+            ->json('data.0');
+
+        $this->assertIsArray($row);
+        $this->assertEqualsCanonicalizing(
+            ['id', 'customer_name', 'currency', 'entries_count', 'created_at', 'expires_at'],
+            array_keys($row),
+        );
+    }
+
+    public function test_staff_can_stop_a_link_and_the_audit_keeps_no_content(): void
+    {
+        $token = $this->token();
+        $this->staff();
+        $id = DeviceStatement::query()->sole()->uuid;
+
+        $this->deleteJson("/api/v1/device-statements/{$id}")->assertNoContent();
+
+        $this->getJson("/api/v1/statements/{$token}")->assertNotFound();
+        $context = DB::table('audit_logs')->where('action', 'device_statement.deleted')->value('context');
+        $this->assertIsString($context);
+        $this->assertStringNotContainsString('أبو محمد', $context);
+        $this->assertStringNotContainsString('150', $context);
     }
 }

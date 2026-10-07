@@ -7,6 +7,7 @@ use Modules\DeviceSubscriptions\Http\Controllers\DeviceAdminController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceCatalogController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceNotificationController;
+use Modules\DeviceSubscriptions\Http\Controllers\DeviceStatementAdminController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceStatementController;
 use Modules\DeviceSubscriptions\Http\Controllers\PlanController;
 use Modules\DeviceSubscriptions\Http\Controllers\Sync\BootstrapDownloadController;
@@ -134,6 +135,12 @@ Route::prefix('api/v1')
             ->name('device-subscriptions.decline');
         Route::delete('device-subscriptions/{deviceSubscription}', [DeviceAdminController::class, 'destroyV1'])
             ->name('device-subscriptions.destroy');
+
+        // Shared statement links (ADR 0013): what a device has shared, and stopping one.
+        Route::get('device-subscriptions/{deviceSubscription}/statements', [DeviceStatementAdminController::class, 'index'])
+            ->name('device-subscriptions.statements.index');
+        Route::delete('device-statements/{deviceStatement}', [DeviceStatementAdminController::class, 'destroy'])
+            ->name('device-statements.destroy');
 
         /*
          * Catalog editor. Note these sit alongside `device-subscriptions/plans`,

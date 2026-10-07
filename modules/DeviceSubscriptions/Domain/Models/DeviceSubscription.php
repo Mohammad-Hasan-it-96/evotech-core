@@ -288,6 +288,17 @@ class DeviceSubscription extends Model
     }
 
     /**
+     * Statement links this device shared (ADR 0013), including expired rows the
+     * daily prune has not reached yet — use DeviceStatement::live() for "shared now".
+     *
+     * @return HasMany<DeviceStatement, $this>
+     */
+    public function statements(): HasMany
+    {
+        return $this->hasMany(DeviceStatement::class);
+    }
+
+    /**
      * Locate a device by its (device_id, app_name) pair.
      *
      * @param  Builder<DeviceSubscription>  $query

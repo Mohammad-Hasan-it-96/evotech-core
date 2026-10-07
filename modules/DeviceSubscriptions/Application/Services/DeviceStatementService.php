@@ -3,6 +3,7 @@
 namespace Modules\DeviceSubscriptions\Application\Services;
 
 use Illuminate\Support\Carbon;
+use Modules\Core\Domain\Contracts\AuditLogger;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceStatement;
 use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 
@@ -15,6 +16,8 @@ use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
  */
 final class DeviceStatementService
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     public function enabled(string $appName): bool
     {
         $apps = config('device-subscriptions.statements.apps', []);
@@ -75,6 +78,22 @@ final class DeviceStatementService
             ->live()
             ->where('token_hash', DeviceStatement::hashToken($token))
             ->first();
+    }
+
+    /**
+     * An operator stops a link from the console — e.g. the customer it describes
+     * asked for it to come down. Audited without its content: the log must not
+     * become a second copy of the debtor's data.
+     */
+    public function deleteByStaff(DeviceStatement $statement): void
+    {
+        $this->audit->log('device_statement.deleted', 'device_statement', $statement->uuid, [
+            'app_name' => $statement->app_name,
+            'device' => $statement->device()->value('uuid'),
+            'expires_at' => $statement->expires_at->toIso8601String(),
+        ]);
+
+        $statement->delete();
     }
 
     /** Delete every expired statement. Returns how many rows went. */
