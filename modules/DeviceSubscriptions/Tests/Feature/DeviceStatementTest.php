@@ -125,7 +125,8 @@ class DeviceStatementTest extends TestCase
         $this->assertNotSame($token, $row->token_hash);
         $this->assertSame(hash('sha256', $token), $row->token_hash);
         $this->assertStringNotContainsString('0999123456', (string) json_encode($row->payload));
-        $this->assertSame(
+        // Canonicalized: MySQL's JSON type does not keep object key order.
+        $this->assertEqualsCanonicalizing(
             ['shop_name', 'customer_name', 'currency', 'balance', 'total_due', 'total_paid', 'generated_at', 'entries'],
             array_keys($row->payload),
         );
