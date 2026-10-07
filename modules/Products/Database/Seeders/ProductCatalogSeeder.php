@@ -100,7 +100,7 @@ class ProductCatalogSeeder extends Seeder
                 'slug' => 'ledger',
                 'name' => ['ar' => 'دفتر حسابات', 'en' => 'Daftar Hesabat'],
                 'tagline' => ['ar' => 'دفتر الديون صار على موبايلك', 'en' => 'The debt notebook for your shop, on your phone'],
-                'description' => ['ar' => 'سجّل ديون زبائنك ودفعاتهم، واعرف رصيد كل زبون فوراً. مجاني بلا حدود ويعمل بلا إنترنت، وبياناتك تبقى على هاتفك. Pro يضيف تذكير واتساب، ونسخاً احتياطياً إلى Google Drive، وتحويل الليرة الجديدة.', 'en' => 'Record the debts and payments of your customers and see every balance instantly. Free with no limits, works offline, and your data stays on your phone. Pro adds WhatsApp reminders, Google Drive backup and the new-lira conversion.'],
+                'description' => ['ar' => 'سجّل ديون زبائنك ودفعاتهم، واعرف رصيد كل زبون فوراً. مجاني بلا حدود ويعمل بلا إنترنت، وبياناتك تبقى على هاتفك. Pro يضيف تذكير واتساب، ونسخاً احتياطياً إلى Google Drive، ودفتراً واحداً على عدّة هواتف في المحل.', 'en' => 'Record the debts and payments of your customers and see every balance instantly. Free with no limits, works offline, and your data stays on your phone. Pro adds WhatsApp reminders, Google Drive backup, and one ledger across the shop\'s phones.'],
                 'icon' => 'book',
                 'platforms' => ['Android'],
                 'is_featured' => true,
