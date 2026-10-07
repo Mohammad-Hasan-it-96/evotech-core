@@ -291,6 +291,6 @@ class DeviceStatementTest extends TestCase
         $context = DB::table('audit_logs')->where('action', 'device_statement.deleted')->value('context');
         $this->assertIsString($context);
         $this->assertStringNotContainsString('أبو محمد', $context);
-        $this->assertStringNotContainsString('150', $context);
+        $this->assertStringNotContainsString('150.5', $context); // the balance; a bare '150' can appear in a uuid
     }
 }

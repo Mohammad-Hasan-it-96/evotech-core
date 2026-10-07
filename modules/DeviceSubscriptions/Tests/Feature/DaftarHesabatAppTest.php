@@ -31,7 +31,8 @@ class DaftarHesabatAppTest extends TestCase
         $this->assertSame('daftar', $app->slug);
         $this->assertSame('دفتر حسابات', $app->label);
         $this->assertSame(14, $app->trial_days);
-        $this->assertTrue($app->uses_shared_plans);
+        // Its own catalog since 2026_10_07_200000 (the 3-phone plan); see DaftarMultiDevicePlanTest.
+        $this->assertFalse($app->uses_shared_plans);
     }
 
     public function test_first_registration_grants_a_fourteen_day_trial(): void
@@ -69,12 +70,13 @@ class DaftarHesabatAppTest extends TestCase
         $this->assertSame('whatsapp', $device->contact_method);
     }
 
-    public function test_the_slug_serves_the_shared_catalog(): void
+    public function test_the_slug_serves_its_own_catalog_with_the_same_single_phone_keys(): void
     {
         $this->getJson('/api/daftar/getPlans')
             ->assertOk()
             ->assertJsonPath('plans.0.id', 'half_year')
             ->assertJsonPath('plans.1.id', 'yearly')
+            ->assertJsonPath('plans.2.id', 'yearly_multi')
             ->assertJsonPath('currency.code', 'USD');
     }
 

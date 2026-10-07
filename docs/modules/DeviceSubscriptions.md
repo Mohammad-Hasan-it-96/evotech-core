@@ -235,6 +235,13 @@ case-insensitively), editable from the dashboard:
 
 `referral_reward_days` (ADR 0012) is 0 for every app except `daftar_hesabat` (30); see *Referrals* below.
 
+`daftar_hesabat` has its **own catalog** since migration `2026_10_07_200000` (owner decision D8):
+- `half_year` and `yearly` are copied from the shared list with their live values, so devices already on them
+  are unaffected; `yearly` stays recommended;
+- `yearly_multi` is new: 12 months, $35, `device_allowance` 3, for the multi-device sync (Accounting-Book T3.1).
+
+Fawateer and SmartAgent stay on the shared list.
+
 `daftar_hesabat` (slug `daftar`, product `ledger`) was added by migration `2026_10_06_100000`, because production ran the config seed before it had a config entry. It reads the shared catalog and has no Firebase project yet (`FIREBASE_*_DAFTAR` unset → pushes no-op). Its client hashes its unreadable-id fallback, so `DeviceSubscription::isFallbackId()` also matches that hash (`HASHED_FALLBACK_DEVICE_IDS`). Unlike Fawateer's, it is **persisted by the client**, not transient.
 
 Firebase credentials stay in **config** and are deliberately *not* part of the editable catalog:
