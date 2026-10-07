@@ -4682,6 +4682,321 @@
                 }
             }
         },
+        "/{app}/statements": {
+            "post": {
+                "operationId": "device.statements.store",
+                "summary": "POST /api/{app}/statements",
+                "tags": [
+                    "DeviceStatement"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "app_name": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    },
+                                    "statement": {
+                                        "type": "object",
+                                        "properties": {
+                                            "shop_name": {
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ],
+                                                "maxLength": 60
+                                            },
+                                            "customer_name": {
+                                                "type": "string",
+                                                "maxLength": 100
+                                            },
+                                            "currency": {
+                                                "type": "string",
+                                                "maxLength": 30
+                                            },
+                                            "balance": {
+                                                "type": "number"
+                                            },
+                                            "total_due": {
+                                                "type": "number",
+                                                "minimum": 0
+                                            },
+                                            "total_paid": {
+                                                "type": "number",
+                                                "minimum": 0
+                                            },
+                                            "generated_at": {
+                                                "type": "string",
+                                                "format": "date-time"
+                                            },
+                                            "entries": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "date": {
+                                                            "type": "string",
+                                                            "format": "date"
+                                                        },
+                                                        "direction": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "due",
+                                                                "paid"
+                                                            ]
+                                                        },
+                                                        "amount": {
+                                                            "type": "number",
+                                                            "minimum": 0
+                                                        },
+                                                        "note": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ],
+                                                            "maxLength": 200
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "date",
+                                                        "direction",
+                                                        "amount"
+                                                    ]
+                                                },
+                                                "maxItems": 300
+                                            }
+                                        },
+                                        "required": [
+                                            "customer_name",
+                                            "currency",
+                                            "balance",
+                                            "total_due",
+                                            "total_paid",
+                                            "generated_at",
+                                            "entries"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "app_name",
+                                    "device_id",
+                                    "statement"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "token": {
+                                            "type": "string"
+                                        },
+                                        "url": {
+                                            "type": "string"
+                                        },
+                                        "expires_at": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "token",
+                                        "url",
+                                        "expires_at"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/{app}/statements/{token}": {
+            "delete": {
+                "operationId": "device.statements.destroy",
+                "summary": "DELETE /api/{app}/statements/{token}",
+                "tags": [
+                    "DeviceStatement"
+                ],
+                "parameters": [
+                    {
+                        "name": "app",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/statements/{token}": {
+            "get": {
+                "operationId": "v1.statements.show",
+                "summary": "GET /api/v1/statements/{token} \u2014 public, rendered by evotech-web",
+                "tags": [
+                    "DeviceStatement"
+                ],
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                "expires_at": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                null,
+                                                "expires_at"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/downloads/events": {
             "get": {
                 "operationId": "v1.downloads.events.index",

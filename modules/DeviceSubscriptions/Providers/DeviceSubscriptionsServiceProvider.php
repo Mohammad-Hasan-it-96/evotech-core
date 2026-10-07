@@ -10,6 +10,7 @@ use Modules\DeviceSubscriptions\Application\Listeners\SyncAppVersionFromRelease;
 use Modules\DeviceSubscriptions\Application\Services\DeviceCatalogStore;
 use Modules\DeviceSubscriptions\Application\Services\SyncEnrollmentService;
 use Modules\DeviceSubscriptions\Console\ImportLegacyDevicesCommand;
+use Modules\DeviceSubscriptions\Console\PruneStatementsCommand;
 use Modules\DeviceSubscriptions\Console\PruneSyncChangesCommand;
 use Modules\DeviceSubscriptions\Console\SweepDeviceExpiryCommand;
 use Modules\DeviceSubscriptions\Domain\Contracts\DevicePushNotifier;
@@ -63,6 +64,7 @@ final class DeviceSubscriptionsServiceProvider extends BaseModuleServiceProvider
                 SweepDeviceExpiryCommand::class,
                 ImportLegacyDevicesCommand::class,
                 PruneSyncChangesCommand::class,
+                PruneStatementsCommand::class,
             ]);
         }
 

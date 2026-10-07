@@ -68,5 +68,18 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(120)->by('sync|'.$key);
         });
+
+        // Statement links (ADR 0013). Creating stores a third party's data, so it is
+        // bounded per device AND per IP; reading is a public page, bounded per IP.
+        RateLimiter::for('statement-create', function (Request $request) {
+            $device = $request->input('device_id');
+
+            return [
+                Limit::perMinute(10)->by('statement-device|'.(is_string($device) ? $device : '')),
+                Limit::perMinute(30)->by('statement-ip|'.$request->ip()),
+            ];
+        });
+
+        RateLimiter::for('statement-read', fn (Request $request) => Limit::perMinute(60)->by('statement-read|'.$request->ip()));
     }
 }

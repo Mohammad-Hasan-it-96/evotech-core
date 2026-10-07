@@ -124,6 +124,17 @@ return [
     ],
 
     /*
+     * Public read-only statement links (ADR 0013). `apps` opts an app in (the data is
+     * a third party's, so it is never on by default); `ttl_days` is how long a link
+     * lives before the daily prune deletes it; `url_base` is the evotech-web page.
+     */
+    'statements' => [
+        'apps' => ['daftar_hesabat'],
+        'ttl_days' => (int) env('DEVICE_STATEMENT_TTL_DAYS', 30),
+        'url_base' => env('DEVICE_STATEMENT_URL_BASE', 'https://evotech-sys.com/ar/s'),
+    ],
+
+    /*
      * Multi-device sync (ADR 0011). One subscription = one business owning N
      * devices. All additive: absent config leaves the legacy single-device shim
      * untouched.

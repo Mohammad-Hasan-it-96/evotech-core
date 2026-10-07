@@ -14,3 +14,9 @@ Schedule::command('device-subscriptions:sweep-expiry')->daily();
  * offline longer than the window re-bootstraps from a snapshot.
  */
 Schedule::command('device-subscriptions:prune-sync-changes')->daily();
+
+/*
+ * Delete expired public statement links (ADR 0013): a debtor's data must be gone
+ * once the link lapses, not just unreachable.
+ */
+Schedule::command('device-subscriptions:prune-statements')->daily();

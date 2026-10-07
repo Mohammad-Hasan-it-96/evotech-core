@@ -279,6 +279,28 @@ responses are byte-identical to before.
   `referral_rewards_count`. `device-apps` exposes and edits `referral_reward_days` (0–365).
 - Tests: `DeviceReferralTest`.
 
+## Public statement links (ADR 0013)
+
+A shop shares a **frozen** customer statement as a link (`https://evotech-sys.com/ar/s/<token>`).
+Opt-in per app (`device-subscriptions.statements.apps`, only `daftar_hesabat`), and free.
+
+| Endpoint | Who | Notes |
+|---|---|---|
+| `POST /api/{app}/statements` | device (`app_name`, `device_id`, `statement`) | `201 {token, url, expires_at}`. Only registered, non-fallback devices of enabled apps. `throttle:statement-create` (10/min per device, 30/min per IP). |
+| `DELETE /api/{app}/statements/{token}` | the creating device only | `204`; hard delete. |
+| `GET /api/v1/statements/{token}` | public (evotech-web) | `{data: snapshot + expires_at}`, `Cache-Control: private, no-store`. `throttle:statement-read` (60/min per IP). |
+
+- **It holds a third party's data, so it is minimal by construction:**
+  - The snapshot is a closed schema: shop name, customer name, currency, balance, totals, generated_at,
+    and at most 300 entries (date, `due`/`paid`, amount, note ≤ 200).
+  - It is validated **and** rebuilt key by key in `DeviceStatementService`, so a phone number or device id
+    can never be stored.
+  - The token is 32 random bytes, stored only as its SHA-256.
+- **Every miss is the same 404:** unknown, expired, revoked, another device's link, or a disabled app.
+- **Lifetime:** 30 days (`statements.ttl_days`). `device-subscriptions:prune-statements` (scheduled daily)
+  **deletes** expired rows. Deleting a device cascades to its links.
+- Tests: `DeviceStatementTest`.
+
 ## Domain, jobs & extension points
 
 | Class | Notes |

@@ -7,6 +7,7 @@ use Modules\DeviceSubscriptions\Http\Controllers\DeviceAdminController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceCatalogController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceController;
 use Modules\DeviceSubscriptions\Http\Controllers\DeviceNotificationController;
+use Modules\DeviceSubscriptions\Http\Controllers\DeviceStatementController;
 use Modules\DeviceSubscriptions\Http\Controllers\PlanController;
 use Modules\DeviceSubscriptions\Http\Controllers\Sync\BootstrapDownloadController;
 use Modules\DeviceSubscriptions\Http\Controllers\Sync\SyncChangeController;
@@ -85,6 +86,26 @@ Route::prefix('api/{app}')
 Route::get('api/{app}/remote-config', AppRemoteConfigController::class)
     ->where(['app' => '(?!v\d)[a-z][a-z0-9_-]*'])
     ->name('api.device.remote-config');
+
+/*
+ * Public read-only statement links (ADR 0013). Create/revoke are device calls in the
+ * namespaced shim style (the device names itself by app_name + device_id); the read
+ * is the public endpoint evotech-web renders. New, so namespaced-only like
+ * remote-config — no shipped build calls an un-namespaced variant.
+ */
+Route::prefix('api/{app}')
+    ->where(['app' => '(?!v\d)[a-z][a-z0-9_-]*'])
+    ->middleware('throttle:statement-create')
+    ->group(function (): void {
+        Route::post('statements', [DeviceStatementController::class, 'store'])
+            ->name('api.device.statements.store');
+        Route::delete('statements/{token}', [DeviceStatementController::class, 'destroy'])
+            ->name('api.device.statements.destroy');
+    });
+
+Route::get('api/v1/statements/{token}', [DeviceStatementController::class, 'show'])
+    ->middleware('throttle:statement-read')
+    ->name('api.v1.statements.show');
 
 // 2. Versioned device API (auth:product) ------------------------------------------
 Route::prefix('api/v1/device')
