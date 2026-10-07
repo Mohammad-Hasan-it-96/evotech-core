@@ -47,7 +47,7 @@ class DeviceReferralTest extends TestCase
         return $this->postJson('/api/daftar/create_device', [
             'app_name' => $app,
             'device_id' => $deviceId,
-            'full_name' => 'محل '.$deviceId,
+            'full_name' => 'محل '.substr($deviceId, 0, 12),
             'phone' => '0999',
             'fcm_token' => 'token-'.$deviceId,
             ...$extra,
