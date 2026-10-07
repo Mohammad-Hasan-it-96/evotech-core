@@ -25,6 +25,7 @@ final class DeviceSubscriptionService
         private readonly DeviceAppCatalog $apps,
         private readonly DevicePushNotifier $push,
         private readonly AuditLogger $audit,
+        private readonly DeviceReferralService $referrals,
     ) {}
 
     public function find(string $deviceId, string $appName): ?DeviceSubscription
@@ -113,6 +114,7 @@ final class DeviceSubscriptionService
         ?string $requestedPlan = null,
         ?string $contactMethod = null,
         ?string $status = null,
+        ?string $referralCode = null,
     ): DeviceSubscription {
         $device = $this->find($deviceId, $appName);
 
@@ -133,10 +135,14 @@ final class DeviceSubscriptionService
                 $device->update($changes);
             }
 
+            // Accepted during the trial too: the app registers silently long
+            // before the user ever sees the invite field (ADR 0012).
+            $this->referrals->attach($device, $referralCode);
+
             return $device;
         }
 
-        return DeviceSubscription::create([
+        $device = DeviceSubscription::create([
             'app_name' => $appName,
             'device_id' => $deviceId,
             'full_name' => $fullName,
@@ -146,6 +152,10 @@ final class DeviceSubscriptionService
             ...$this->grantTrial($appName, $deviceId),
             ...$planRequest,
         ]);
+
+        $this->referrals->attach($device, $referralCode);
+
+        return $device;
     }
 
     /**
@@ -296,6 +306,11 @@ final class DeviceSubscriptionService
         // could pay and still watch every phone (its own included) lapse on the
         // expiry seeded at onboarding.
         $this->propagateActivationToBusiness($device, $planId, $expiresAt);
+
+        // The one moment a referral pays (ADR 0012): an operator-confirmed, paid
+        // activation. A no-op for unreferred devices, apps without referrals, and
+        // every renewal after the first.
+        $this->referrals->rewardActivation($device);
 
         DeviceActivated::dispatch($device);
 

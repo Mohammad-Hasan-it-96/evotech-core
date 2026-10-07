@@ -42,6 +42,14 @@ class DeviceSubscriptionResource extends JsonResource
             'status' => $this->status,
             'requested_plan' => $this->requested_plan,
             'contact_method' => $this->contact_method,
+            // Referrals (ADR 0012). `referred_by` and the count appear only when the
+            // query loaded them (the console listing does), to keep this N+1-free.
+            'referral_code' => $this->referral_code,
+            'referred_by' => $this->whenLoaded('referredBy', fn (): ?array => $this->referredBy === null ? null : [
+                'id' => $this->referredBy->uuid,
+                'full_name' => $this->referredBy->full_name,
+            ]),
+            'referral_rewards_count' => $this->whenCounted('referralRewards'),
             'stars' => $this->stars,
             'comment' => $this->comment,
             'created_at' => $this->created_at?->toIso8601String(),

@@ -45,6 +45,7 @@ final class DeviceCatalogController extends ApiController
         $fields = [
             'label',
             'trial_days',
+            'referral_reward_days',
             'uses_shared_plans',
             'latest_version',
             'api_base_url',

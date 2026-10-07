@@ -30,6 +30,7 @@ final class DeviceAppResource extends JsonResource
 
             'label' => $this->label,
             'trial_days' => $this->trial_days,
+            'referral_reward_days' => $this->referral_reward_days,
             'uses_shared_plans' => $this->uses_shared_plans,
             'plans_count' => $this->whenCounted('plans'),
 

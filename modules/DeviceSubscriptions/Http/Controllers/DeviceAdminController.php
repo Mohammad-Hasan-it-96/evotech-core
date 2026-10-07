@@ -92,6 +92,8 @@ final class DeviceAdminController extends ApiController
         $perPage = min(max($request->integer('per_page', 15), 1), 100);
 
         $devices = DeviceSubscription::query()
+            ->with('referredBy:id,uuid,full_name')
+            ->withCount(['referralRewards' => fn (Builder $query): Builder => $query->where('days', '>', 0)])
             ->when(
                 $request->filled('status'),
                 fn (Builder $query): Builder => $query->where('status', (string) $request->string('status')),

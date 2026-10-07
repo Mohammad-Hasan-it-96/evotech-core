@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Modules\Core\Domain\Concerns\HasUuid;
@@ -33,6 +34,8 @@ use Modules\DeviceSubscriptions\Database\Factories\DeviceSubscriptionFactory;
  * @property string|null $fcm_token
  * @property int|null $stars
  * @property string|null $comment
+ * @property string|null $referral_code
+ * @property int|null $referred_by_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -261,6 +264,27 @@ class DeviceSubscription extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(DeviceBusiness::class, 'business_id');
+    }
+
+    /**
+     * The device whose invite code this one registered with (ADR 0012). Server-set
+     * once, never mass-assigned.
+     *
+     * @return BelongsTo<DeviceSubscription, $this>
+     */
+    public function referredBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'referred_by_id');
+    }
+
+    /**
+     * Rewards this device earned as a referrer, including the 0-day ones.
+     *
+     * @return HasMany<DeviceReferralReward, $this>
+     */
+    public function referralRewards(): HasMany
+    {
+        return $this->hasMany(DeviceReferralReward::class, 'referrer_id');
     }
 
     /**

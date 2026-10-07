@@ -32,6 +32,10 @@ class UpdateDeviceAppRequest extends FormRequest
             // to an app whose owner never asked for them.
             'trial_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
 
+            // Referrals (ADR 0012): days a referrer earns per invited device's first
+            // paid activation. 0 = the app does not run referrals.
+            'referral_reward_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
+
             'uses_shared_plans' => ['sometimes', 'boolean'],
 
             // The Products-module row this app's releases belong to. Null unlinks.

@@ -28,6 +28,17 @@ final class DeviceAppCatalog
         return is_numeric($days) ? max(0, (int) $days) : 0;
     }
 
+    /**
+     * Days a referrer earns when a device it invited pays (ADR 0012); 0 (the default)
+     * means the app does not run referrals, and its wire responses stay unchanged.
+     */
+    public function referralRewardDays(string $appName): int
+    {
+        $days = $this->settings($appName)['referral_reward_days'] ?? 0;
+
+        return is_numeric($days) ? max(0, (int) $days) : 0;
+    }
+
     /** Product name for push copy; falls back to the raw app_name. */
     public function label(string $appName): string
     {

@@ -1538,6 +1538,14 @@
                                             "null"
                                         ],
                                         "maxLength": 20
+                                    },
+                                    "referral_code": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "description": "Invite code (ADR 0012). Permissive for the same reason: a bad code is\nignored by the service, never a reason to fail registration.",
+                                        "maxLength": 32
                                     }
                                 },
                                 "required": [
@@ -1589,6 +1597,38 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "referral_code": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "referral_rewards": {
+                                                            "type": "integer",
+                                                            "minimum": 0
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "referral_code",
+                                                        "referral_rewards"
+                                                    ]
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0,
+                                                    "additionalItems": false
+                                                }
+                                            ]
                                         }
                                     },
                                     "required": [
@@ -1597,7 +1637,8 @@
                                         "expires_at",
                                         "plan",
                                         "fcm_token",
-                                        "server_time"
+                                        "server_time",
+                                        null
                                     ]
                                 }
                             }
@@ -1709,6 +1750,38 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "referral_code": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "referral_rewards": {
+                                                            "type": "integer",
+                                                            "minimum": 0
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "referral_code",
+                                                        "referral_rewards"
+                                                    ]
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0,
+                                                    "additionalItems": false
+                                                }
+                                            ]
                                         }
                                     },
                                     "required": [
@@ -1718,7 +1791,8 @@
                                         "plan",
                                         "expires_at",
                                         "google_account",
-                                        "server_time"
+                                        "server_time",
+                                        null
                                     ]
                                 }
                             }
@@ -2089,6 +2163,14 @@
                                             "null"
                                         ],
                                         "maxLength": 20
+                                    },
+                                    "referral_code": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "description": "Invite code (ADR 0012). Permissive for the same reason: a bad code is\nignored by the service, never a reason to fail registration.",
+                                        "maxLength": 32
                                     }
                                 },
                                 "required": [
@@ -2140,6 +2222,38 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "referral_code": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "referral_rewards": {
+                                                            "type": "integer",
+                                                            "minimum": 0
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "referral_code",
+                                                        "referral_rewards"
+                                                    ]
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0,
+                                                    "additionalItems": false
+                                                }
+                                            ]
                                         }
                                     },
                                     "required": [
@@ -2148,7 +2262,8 @@
                                         "expires_at",
                                         "plan",
                                         "fcm_token",
-                                        "server_time"
+                                        "server_time",
+                                        null
                                     ]
                                 }
                             }
@@ -2270,6 +2385,38 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "referral_code": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "referral_rewards": {
+                                                            "type": "integer",
+                                                            "minimum": 0
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "referral_code",
+                                                        "referral_rewards"
+                                                    ]
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0,
+                                                    "additionalItems": false
+                                                }
+                                            ]
                                         }
                                     },
                                     "required": [
@@ -2279,7 +2426,8 @@
                                         "plan",
                                         "expires_at",
                                         "google_account",
-                                        "server_time"
+                                        "server_time",
+                                        null
                                     ]
                                 }
                             }
@@ -2660,6 +2808,14 @@
                                             "null"
                                         ],
                                         "maxLength": 20
+                                    },
+                                    "referral_code": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "description": "Invite code (ADR 0012). Permissive for the same reason: a bad code is\nignored by the service, never a reason to fail registration.",
+                                        "maxLength": 32
                                     }
                                 },
                                 "required": [
@@ -2711,6 +2867,38 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "referral_code": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "referral_rewards": {
+                                                            "type": "integer",
+                                                            "minimum": 0
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "referral_code",
+                                                        "referral_rewards"
+                                                    ]
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0,
+                                                    "additionalItems": false
+                                                }
+                                            ]
                                         }
                                     },
                                     "required": [
@@ -2719,7 +2907,8 @@
                                         "expires_at",
                                         "plan",
                                         "fcm_token",
-                                        "server_time"
+                                        "server_time",
+                                        null
                                     ]
                                 }
                             }
@@ -2834,6 +3023,38 @@
                                                 "string",
                                                 "null"
                                             ]
+                                        },
+                                        "": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "referral_code": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "referral_rewards": {
+                                                            "type": "integer",
+                                                            "minimum": 0
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "referral_code",
+                                                        "referral_rewards"
+                                                    ]
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0,
+                                                    "additionalItems": false
+                                                }
+                                            ]
                                         }
                                     },
                                     "required": [
@@ -2843,7 +3064,8 @@
                                         "plan",
                                         "expires_at",
                                         "google_account",
-                                        "server_time"
+                                        "server_time",
+                                        null
                                     ]
                                 }
                             }
@@ -8930,6 +9152,9 @@
                     "trial_days": {
                         "type": "integer"
                     },
+                    "referral_reward_days": {
+                        "type": "integer"
+                    },
                     "uses_shared_plans": {
                         "type": "boolean"
                     },
@@ -8989,6 +9214,7 @@
                     "slug",
                     "label",
                     "trial_days",
+                    "referral_reward_days",
                     "uses_shared_plans",
                     "latest_version",
                     "api_base_url",
@@ -9245,6 +9471,18 @@
                             "integer",
                             "null"
                         ]
+                    },
+                    "referral_code": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "referred_by_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 },
                 "required": [
@@ -9267,7 +9505,9 @@
                     "contact_method",
                     "trial_expires_at",
                     "google_account",
-                    "business_id"
+                    "business_id",
+                    "referral_code",
+                    "referred_by_id"
                 ],
                 "title": "DeviceSubscription"
             },
@@ -9348,6 +9588,37 @@
                             "null"
                         ]
                     },
+                    "referral_code": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Referrals (ADR 0012). `referred_by` and the count appear only when the\nquery loaded them (the console listing does), to keep this N+1-free."
+                    },
+                    "referred_by": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "full_name": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "full_name"
+                        ]
+                    },
+                    "referral_rewards_count": {
+                        "type": "integer"
+                    },
                     "stars": {
                         "type": [
                             "integer",
@@ -9383,6 +9654,7 @@
                     "status",
                     "requested_plan",
                     "contact_method",
+                    "referral_code",
                     "stars",
                     "comment",
                     "created_at",
@@ -10821,6 +11093,12 @@
                     "trial_days": {
                         "type": "integer",
                         "description": "0 = no trial. SmartAgent is deliberately 0; raising it grants trials\nto an app whose owner never asked for them.",
+                        "minimum": 0,
+                        "maximum": 365
+                    },
+                    "referral_reward_days": {
+                        "type": "integer",
+                        "description": "Referrals (ADR 0012): days a referrer earns per invited device's first\npaid activation. 0 = the app does not run referrals.",
                         "minimum": 0,
                         "maximum": 365
                     },

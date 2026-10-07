@@ -7,7 +7,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
+use Modules\DeviceSubscriptions\Application\Services\DeviceReferralService;
 use Modules\DeviceSubscriptions\Application\Services\DeviceSubscriptionService;
+use Modules\DeviceSubscriptions\Domain\Models\DeviceSubscription;
 
 /**
  * Device self-service endpoints (ADR 0010). Reachable two ways for the same logic:
@@ -21,7 +23,10 @@ use Modules\DeviceSubscriptions\Application\Services\DeviceSubscriptionService;
  */
 final class DeviceController
 {
-    public function __construct(private readonly DeviceSubscriptionService $devices) {}
+    public function __construct(
+        private readonly DeviceSubscriptionService $devices,
+        private readonly DeviceReferralService $referrals,
+    ) {}
 
     /**
      * POST create_device — register a device, refresh its token, or file a plan
@@ -40,6 +45,9 @@ final class DeviceController
             'requested_plan' => 'nullable|string|max:50',
             'contact_method' => 'nullable|string|max:30',
             'status' => 'nullable|string|max:20',
+            // Invite code (ADR 0012). Permissive for the same reason: a bad code is
+            // ignored by the service, never a reason to fail registration.
+            'referral_code' => 'nullable|string|max:32',
         ]);
 
         if ($validator->fails()) {
@@ -55,6 +63,7 @@ final class DeviceController
             requestedPlan: $this->optional($request, 'requested_plan'),
             contactMethod: $this->optional($request, 'contact_method'),
             status: $this->optional($request, 'status'),
+            referralCode: $this->optional($request, 'referral_code'),
         );
 
         // Effective state, so a device linked to a multi-device business answers
@@ -81,6 +90,7 @@ final class DeviceController
             'plan' => $status->planId,
             'fcm_token' => $device->fcm_token,
             'server_time' => Carbon::now()->toISOString(),
+            ...$this->referralFields($device),
         ]);
     }
 
@@ -142,6 +152,7 @@ final class DeviceController
              */
             'google_account' => $device->maskedGoogleAccount(),
             'server_time' => Carbon::now()->toISOString(),
+            ...$this->referralFields($device),
         ]);
     }
 
@@ -242,6 +253,24 @@ final class DeviceController
         );
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * The invite code and paid-reward count (ADR 0012) — only for apps that run
+     * referrals, so every other app's response stays byte-identical.
+     *
+     * @return array<string, string|int|null>
+     */
+    private function referralFields(DeviceSubscription $device): array
+    {
+        if (! $this->referrals->enabled((string) $device->app_name)) {
+            return [];
+        }
+
+        return [
+            'referral_code' => $this->referrals->codeFor($device),
+            'referral_rewards' => $this->referrals->rewardCount($device),
+        ];
     }
 
     /** A supplied non-empty field, or null when the app omitted it. */

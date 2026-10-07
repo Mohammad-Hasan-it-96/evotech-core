@@ -20,6 +20,7 @@ use Modules\Core\Domain\Concerns\HasUuid;
  * @property string $slug
  * @property string $label
  * @property int $trial_days
+ * @property int $referral_reward_days
  * @property bool $uses_shared_plans
  * @property int|null $product_id
  * @property string|null $latest_version
@@ -39,6 +40,7 @@ class DeviceApp extends Model
         'slug',
         'label',
         'trial_days',
+        'referral_reward_days',
         'uses_shared_plans',
         'product_id',
         'latest_version',
@@ -54,6 +56,7 @@ class DeviceApp extends Model
     {
         return [
             'trial_days' => 'int',
+            'referral_reward_days' => 'int',
             'uses_shared_plans' => 'bool',
             'downloads' => 'array',
             'update_notes' => 'array',

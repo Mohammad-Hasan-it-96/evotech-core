@@ -233,6 +233,8 @@ case-insensitively), editable from the dashboard:
 | `SmartAgent` | 0 (none) | المندوب الذكي |
 | `daftar_hesabat` | 14 | دفتر حسابات |
 
+`referral_reward_days` (ADR 0012) is 0 for every app except `daftar_hesabat` (30); see *Referrals* below.
+
 `daftar_hesabat` (slug `daftar`, product `ledger`) was added by migration `2026_10_06_100000`, because production ran the config seed before it had a config entry. It reads the shared catalog and has no Firebase project yet (`FIREBASE_*_DAFTAR` unset → pushes no-op). Its client hashes its unreadable-id fallback, so `DeviceSubscription::isFallbackId()` also matches that hash (`HASHED_FALLBACK_DEVICE_IDS`). Unlike Fawateer's, it is **persisted by the client**, not transient.
 
 Firebase credentials stay in **config** and are deliberately *not* part of the editable catalog:
@@ -250,6 +252,32 @@ what makes it unfarmable — Android's `ANDROID_ID` survives uninstall/data-clea
 finds the existing row and gets nothing (imported legacy rows are never retro-granted). Operator
 activation converts it by setting `plan_id`, which ends the trial by definition;
 `trial_expires_at` is kept as the record that a trial was spent.
+
+## Referrals (ADR 0012)
+
+«ادعُ محلاً واحصل على شهر مجاني». Opt-in per app through `device_apps.referral_reward_days`
+(0 = off). Only `daftar_hesabat` runs it (30). Fawateer and SmartAgent are at 0, and their
+responses are byte-identical to before.
+
+- **Code:** `device_subscriptions.referral_code`, 6 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`,
+  unique per app. Minted lazily when `check_device`/`create_device` answers an enabled app; never for the
+  fallback bucket. Both endpoints then add `referral_code` and `referral_rewards` (the count of rewards
+  that granted days).
+- **Attribution:** `create_device` takes an optional `referral_code` and sets `referred_by_id` once,
+  only while the device has never been activated (`plan_id` null). An unknown code, the device's own
+  code, or another app's code is ignored silently, never a 422.
+- **Reward:** `DeviceSubscriptionService::activate()` → `DeviceReferralService::rewardActivation()`.
+  - The **first** operator activation of a referred device adds the app's days to the referrer's
+    effective source (its business when linked), starting from now if lapsed.
+  - `device_referral_rewards.referred_id` is UNIQUE, so renewals and races never pay twice.
+  - Capped at `device-subscriptions.referrals.max_rewards_per_year` (12, rolling 365 days). Over the cap,
+    or for a lifetime referrer, the row is recorded with 0 days.
+  - Audited as `device_referral.rewarded`; the referrer gets a `new_plan_activated` push.
+- **Why only on activation:** device ids are free to fabricate and every new device gets the trial,
+  so anything granted on install could be farmed. An activation is paid and confirmed by an operator.
+- **Console:** the staff device listing carries `referral_code`, `referred_by {id, full_name}` and
+  `referral_rewards_count`. `device-apps` exposes and edits `referral_reward_days` (0–365).
+- Tests: `DeviceReferralTest`.
 
 ## Domain, jobs & extension points
 

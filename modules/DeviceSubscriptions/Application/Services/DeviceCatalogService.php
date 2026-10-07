@@ -81,14 +81,14 @@ final class DeviceCatalogService
      */
     public function updateApp(DeviceApp $app, array $attributes): DeviceApp
     {
-        $before = $app->only(['label', 'trial_days', 'uses_shared_plans', 'product_id']);
+        $before = $app->only(['label', 'trial_days', 'referral_reward_days', 'uses_shared_plans', 'product_id']);
 
         $app->update($attributes);
 
         $this->audit->log('device_app.updated', 'device_app', $app->uuid, [
             'name' => $app->name,
             'before' => $before,
-            'after' => $app->only(['label', 'trial_days', 'uses_shared_plans', 'product_id']),
+            'after' => $app->only(['label', 'trial_days', 'referral_reward_days', 'uses_shared_plans', 'product_id']),
         ]);
 
         $this->store->flush();

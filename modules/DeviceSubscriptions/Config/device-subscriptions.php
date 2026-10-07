@@ -102,12 +102,25 @@ return [
         'daftar_hesabat' => [
             'label' => 'دفتر حسابات',
             'trial_days' => 14,
+            // Referrals (ADR 0012, owner decision D14): 30 days per invited shop's
+            // first paid activation. The database row is authoritative; this is the
+            // fallback when the catalog tables are unavailable.
+            'referral_reward_days' => 30,
             'slug' => 'daftar',
             'firebase' => [
                 'project_id' => env('FIREBASE_PROJECT_ID_DAFTAR'),
                 'credentials' => env('FIREBASE_CREDENTIALS_DAFTAR'),
             ],
         ],
+    ],
+
+    /*
+     * Referrals (ADR 0012). Whether an app runs them, and how many days a reward is
+     * worth, is per app (`device_apps.referral_reward_days`). This is the one global
+     * rule: at most this many paying rewards per referrer per rolling 365 days.
+     */
+    'referrals' => [
+        'max_rewards_per_year' => (int) env('DEVICE_REFERRAL_MAX_REWARDS_PER_YEAR', 12),
     ],
 
     /*

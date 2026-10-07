@@ -112,6 +112,7 @@ final class DeviceCatalogStore
                 'slug' => $app->slug,
                 'label' => $app->label,
                 'trial_days' => $app->trial_days,
+                'referral_reward_days' => $app->referral_reward_days,
                 // null = defer to the shared list; [] = sells nothing. Kept apart.
                 'plans' => $app->uses_shared_plans
                     ? null
@@ -140,6 +141,7 @@ final class DeviceCatalogStore
 
             $plans = $settings['plans'] ?? null;
             $trialDays = $settings['trial_days'] ?? 0;
+            $referralDays = $settings['referral_reward_days'] ?? 0;
             $slug = $settings['slug'] ?? null;
             $label = $settings['label'] ?? null;
 
@@ -148,6 +150,7 @@ final class DeviceCatalogStore
                 'slug' => is_string($slug) ? $slug : strtolower($name),
                 'label' => is_string($label) && $label !== '' ? $label : $name,
                 'trial_days' => is_numeric($trialDays) ? max(0, (int) $trialDays) : 0,
+                'referral_reward_days' => is_numeric($referralDays) ? max(0, (int) $referralDays) : 0,
                 'plans' => is_array($plans) ? array_values($plans) : null,
             ];
         }
